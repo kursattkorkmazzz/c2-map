@@ -71,7 +71,7 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 - [x] `transaction(fn)` — iç içe çağrı dıştakine katılır; `tx` dışarıda kullanılırsa hata; `fn` hata fırlatırsa geri alma yok
 - [x] `upsertFeatures` — ADD / UPDATE (değişiklik yoksa hiçbir şey, eski referans kalır)
 - [x] `patchFeatures` — olmayan id yok sayılır + `stats.ignoredPatches`
-- [x] `removeFeatures` — indeks, seçim ve hover'dan da düşer (seçim/hover testi 0.2.9'da, seçim API'si gelince)
+- [x] `removeFeatures` — indeks, seçim ve hover'dan da düşer (seçim/hover testi 0.2.9'da yazıldı)
 - [x] `layerId` değişimi — iki katmanın indeksi güncellenir, `LAYER` biti
 - [x] Yetim unsur kabul edilir ve indekslenir
 - [x] `rev` kuralı — eski/eşit `rev` düşürülür + `stats.droppedStale`; `rev` nesneden ayrı tutulur
@@ -105,11 +105,12 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.9 Seçim ve hover
 
-- [ ] `select(ids, mode)` — `replace` / `add` / `remove` / `toggle`
-- [ ] `clearSelection`, `setHovered`
-- [ ] `selectable === false` (unsur veya katman) atlanır
-- [ ] `selection` her değişimde yeni `Set`
-- [ ] Günlükte yalnız seçimi **değişen** id'ler
+- [x] `select(ids, mode)` — `replace` / `add` / `remove` / `toggle` (`SELECT_MODE`)
+- [x] `clearSelection`, `setHovered` (store'da olmayan id yok sayılır)
+- [x] `selectable === false` (unsur veya katman zincirinden biri) atlanır; çıkarma her zaman serbest
+- [x] `selection` her değişimde yeni `Set`; değişiklik yoksa aynı referans
+- [x] Günlükte yalnız seçimi **değişen** id'ler
+- [x] Testler (`map-store.selection.test.ts`), 0.2.5'ten kalan "silinen unsur seçim/hover'dan düşer" dahil
 
 ### 0.2.10 Abonelik
 

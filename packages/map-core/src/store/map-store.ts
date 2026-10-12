@@ -6,8 +6,8 @@
 // (ChangeJournal) düşer ve MapSync bunu `drainChanges()` ile alır.
 //
 // Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur), 0.2.6 (katman),
-// 0.2.7 (altlık) ve 0.2.8 (snapshot) hazır. Seçim/hover (0.2.9) ve abonelik (0.2.10)
-// işlemleri sonraki adımlarda bu dosyaya eklenecek.
+// 0.2.7 (altlık), 0.2.8 (snapshot) ve 0.2.9 (seçim/hover) hazır. Abonelik (0.2.10)
+// sonraki adımda bu dosyaya eklenecek.
 
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
@@ -84,7 +84,25 @@ export interface MapTx {
   patchBasemap(id: string, patch: BasemapPatch): void;
   /** Siler. Olmayan id sessizce yok sayılır. */
   removeBasemaps(ids: readonly string[]): void;
+
+  /**
+   * Seçimi değiştirir (varsayılan `replace`). Store'da olmayan ve seçilemeyen unsurlar
+   * (unsurun veya katman zincirinden birinin `selectable === false`) atlanır; çıkarma (`remove`,
+   * `toggle` ile kaldırma) her zaman serbesttir.
+   */
+  select(ids: readonly string[], mode?: SelectMode): void;
+  clearSelection(): void;
+  /** Fare altındaki unsur. Store'da olmayan id (ör. sentetik küme) yok sayılır. */
+  setHovered(id: string | null): void;
 }
+
+export const SELECT_MODE = {
+  REPLACE: "replace",
+  ADD: "add",
+  REMOVE: "remove",
+  TOGGLE: "toggle",
+} as const;
+export type SelectMode = (typeof SELECT_MODE)[keyof typeof SELECT_MODE];
 
 export interface MapStore {
   // okuma
@@ -178,6 +196,9 @@ class MapStoreImpl implements MapStore {
       upsertBasemaps: (basemaps) => this.guard(() => this.upsertBasemaps(basemaps)),
       patchBasemap: (id, patch) => this.guard(() => this.patchBasemap(id, patch)),
       removeBasemaps: (ids) => this.guard(() => this.removeBasemaps(ids)),
+      select: (ids, mode) => this.guard(() => this.select(ids, mode)),
+      clearSelection: () => this.guard(() => this.applySelection(EMPTY_SET)),
+      setHovered: (id) => this.guard(() => this.setHovered(id)),
     };
   }
 
@@ -297,8 +318,7 @@ class MapStoreImpl implements MapStore {
       if (this.selection.has(id)) {
         const next = new Set(this.selection);
         next.delete(id);
-        this.selection = next;
-        this.journal.flipSelection(id);
+        this.applySelection(next);
       }
       if (this.hovered === id) {
         this.hovered = null;
@@ -545,6 +565,79 @@ class MapStoreImpl implements MapStore {
       this.sortedBasemaps = null;
       this.journal.record(ENTITY_KIND.BASEMAP, other.id, CHANGE_OP.UPDATE, BASEMAP_CHANGE.VISIBLE);
     }
+  }
+
+  // ── Seçim ve hover ─────────────────────────────────────────────
+
+  private select(ids: readonly string[], mode: SelectMode = SELECT_MODE.REPLACE): void {
+    const current = this.selection;
+    let next: Set<string>;
+
+    switch (mode) {
+      case SELECT_MODE.REPLACE:
+        next = new Set(ids.filter((id) => this.isSelectable(id)));
+        break;
+      case SELECT_MODE.ADD:
+        next = new Set(current);
+        for (const id of ids) if (this.isSelectable(id)) next.add(id);
+        break;
+      case SELECT_MODE.REMOVE:
+        next = new Set(current);
+        for (const id of ids) next.delete(id);
+        break;
+      case SELECT_MODE.TOGGLE:
+        next = new Set(current);
+        for (const id of ids) {
+          if (next.has(id)) next.delete(id);
+          else if (this.isSelectable(id)) next.add(id);
+        }
+        break;
+    }
+    this.applySelection(next);
+  }
+
+  /**
+   * Yeni seçimi uygular. Durumu gerçekten değişen her id günlüğe "döndü" olarak yazılır;
+   * hiçbir şey değişmediyse küme referansı da değişmez.
+   */
+  private applySelection(next: ReadonlySet<string>): void {
+    const current = this.selection;
+    let changed = false;
+    for (const id of current) {
+      if (!next.has(id)) {
+        this.journal.flipSelection(id);
+        changed = true;
+      }
+    }
+    for (const id of next) {
+      if (!current.has(id)) {
+        this.journal.flipSelection(id);
+        changed = true;
+      }
+    }
+    if (changed) this.selection = next.size === 0 ? EMPTY_SET : next;
+  }
+
+  /** Unsur var mı ve kendisi ile katman zincirindeki hiçbir katman `selectable: false` değil mi? */
+  private isSelectable(id: string): boolean {
+    const feature = this.features.get(id);
+    if (!feature || feature.selectable === false) return false;
+
+    let layerId: string | null = feature.layerId;
+    for (let guard = 0; layerId !== null && guard <= this.layers.size; guard++) {
+      const layer = this.layers.get(layerId);
+      if (!layer) break; // yetim: üstünde katman bilgisi yok
+      if (layer.selectable === false) return false;
+      layerId = layer.parentId;
+    }
+    return true;
+  }
+
+  private setHovered(id: string | null): void {
+    if (id !== null && !this.features.has(id)) return;
+    if (id === this.hovered) return;
+    this.journal.recordHover(this.hovered, id);
+    this.hovered = id;
   }
 
   // Yetim unsur (katmanı henüz yok) de indekslenir: katman sonradan gelince unsurları hazırdır.

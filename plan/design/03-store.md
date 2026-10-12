@@ -193,6 +193,12 @@ tx.replaceLayerContents("birlikler", snapshot);
 - Silinen unsur seçimden ve hover'dan otomatik düşer.
 - `selectable === false` olan unsur (veya katmanı) seçilemez; select çağrısı onu atlar.
 - Günlükte seçimi **değişen** id'ler tutulur (MapSync yalnız onlar için `feature-state` üretir).
+- Seçilebilirlik: unsur store'da olmalı, `selectable !== false` olmalı ve katman zincirinde
+  (ataları dahil) `selectable: false` katman olmamalı. Yetim unsur (katman bilgisi yok) seçilebilir.
+  Seçimden **çıkarma** her zaman serbesttir. Seçiliyken seçilemez hale gelen unsur seçimden
+  otomatik düşmez (bilinçli tercih: bir sonraki seçim işleminde temizlenir).
+- `setHovered` store'da olmayan id'yi (ör. sentetik küme id'si) yok sayar; küme hover'ı
+  adapter/sunum aşaması tarafında yönetilir.
 
 ## Değişiklik günlüğü (ChangeJournal)
 
