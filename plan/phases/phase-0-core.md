@@ -25,10 +25,10 @@ Tasarım: [design/02-core-model.md](../design/02-core-model.md) · Klasör: `src
 - [x] `feature.ts` — `Feature<K, S, P>` (`origin` yok, `rev` var)
 - [x] `basemap.ts` — `BASEMAP_SOURCE`, `BasemapSource`, `Basemap`, `BasemapProvider`
 - [x] `camera.ts` — `CameraView`, `Bounds`
-- [ ] `model/index.ts` — tüm model dosyalarını dışa aktar (şu an boş)
-- [ ] `src/index.ts` — `model`'i dışa aktar
-- [ ] (Öneri) Geometri dizilerini ve `IMAGE.corners`'ı `readonly` yap ([neden](../design/02-core-model.md#geometri-ve-koordinat))
-- [ ] (Öneri) Kod içindeki `§6.3` gibi eski plan referanslarını yeni dosya adlarıyla değiştir
+- [x] `model/index.ts` — tüm model dosyalarını dışa aktar
+- [x] `src/index.ts` — `model`'i dışa aktar
+- [x] (Öneri) Geometri dizilerini ve `IMAGE.corners`'ı `readonly` yap ([neden](../design/02-core-model.md#geometri-ve-koordinat))
+- [x] (Öneri) Kod içindeki `§6.3` gibi eski plan referanslarını yeni dosya adlarıyla değiştir
 
 ## 0.2 MapStore
 

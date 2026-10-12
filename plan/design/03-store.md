@@ -16,29 +16,29 @@ Harita (MapSync üzerinden) ve UI (React hook'ları, LayerTree) bu store'un abon
 
 ## Neden zustand değil
 
-| Seçenek | Artı | Eksi |
-|---|---|---|
-| zustand (immutable, tek state) | Bilinen, küçük, devtools, `zustand/vanilla` React'siz çalışır | Her güncellemede `{...features}` kopyası O(n); her `set` tüm dinleyicileri çağırır; değişiklik günlüğü yok → MapSync her flush'ta tüm unsurları karşılaştırmak zorunda |
-| zustand + `subscribeWithSelector` | Seçici bazlı abonelik | Seçiciler yine her `set`'te çalışır (O(abone)); günlük sorunu aynı |
-| **Amaca özel `MapStore`** ✅ | `Map` yerinde güncellenir, varlıklar yeni referans; id bazlı dinleyici; günlük yerleşik; O(değişen) | Kendi kodumuz (~400–500 satır + test) |
-| headless-tree state merkezli | Ağaç zaten orada | UI-ağaç kütüphanesi; canlı veri ve harita senkronu için tasarlanmamış |
+| Seçenek                           | Artı                                                                                                | Eksi                                                                                                                                                                   |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| zustand (immutable, tek state)    | Bilinen, küçük, devtools, `zustand/vanilla` React'siz çalışır                                       | Her güncellemede `{...features}` kopyası O(n); her `set` tüm dinleyicileri çağırır; değişiklik günlüğü yok → MapSync her flush'ta tüm unsurları karşılaştırmak zorunda |
+| zustand + `subscribeWithSelector` | Seçici bazlı abonelik                                                                               | Seçiciler yine her `set`'te çalışır (O(abone)); günlük sorunu aynı                                                                                                     |
+| **Amaca özel `MapStore`** ✅      | `Map` yerinde güncellenir, varlıklar yeni referans; id bazlı dinleyici; günlük yerleşik; O(değişen) | Kendi kodumuz (~400–500 satır + test)                                                                                                                                  |
+| headless-tree state merkezli      | Ağaç zaten orada                                                                                    | UI-ağaç kütüphanesi; canlı veri ve harita senkronu için tasarlanmamış                                                                                                  |
 
 zustand yalnız **uygulama UI durumu** için kullanılır (aktif araç, panel durumu, filtreler,
 koordinat formatı, harita ayarları). headless-tree yalnız ağaç UI durumunu tutar ([06](06-layer-tree.md)).
 
 ## İç veri yapıları
 
-| Yapı | Tip | Amaç |
-|---|---|---|
-| `features` | `Map<id, Feature>` | O(1) erişim |
-| `layers` | `Map<id, Layer>` | O(1) erişim |
-| `basemaps` | `Map<id, Basemap>` | O(1) erişim |
-| `childLayerIds` | `Map<parentId \| null, readonly string[]>` | Kardeş katman sırası (kök: `null`) |
-| `featureIdsByLayer` | `Map<layerId, Set<featureId>>` | Katmanın unsurları, sayaç, katman silme |
-| `selection` | `ReadonlySet<featureId>` | Seçili unsurlar |
-| `hovered` | `featureId \| null` | Fare altındaki unsur |
-| `updatedAt` | `Map<featureId, number>` | Bayatlık (stale) hesabı için son güncelleme zamanı |
-| `journal` | `ChangeJournal` | MapSync için değişiklik günlüğü (aşağıda) |
+| Yapı                | Tip                                        | Amaç                                               |
+| ------------------- | ------------------------------------------ | -------------------------------------------------- |
+| `features`          | `Map<id, Feature>`                         | O(1) erişim                                        |
+| `layers`            | `Map<id, Layer>`                           | O(1) erişim                                        |
+| `basemaps`          | `Map<id, Basemap>`                         | O(1) erişim                                        |
+| `childLayerIds`     | `Map<parentId \| null, readonly string[]>` | Kardeş katman sırası (kök: `null`)                 |
+| `featureIdsByLayer` | `Map<layerId, Set<featureId>>`             | Katmanın unsurları, sayaç, katman silme            |
+| `selection`         | `ReadonlySet<featureId>`                   | Seçili unsurlar                                    |
+| `hovered`           | `featureId \| null`                        | Fare altındaki unsur                               |
+| `updatedAt`         | `Map<featureId, number>`                   | Bayatlık (stale) hesabı için son güncelleme zamanı |
+| `journal`           | `ChangeJournal`                            | MapSync için değişiklik günlüğü (aşağıda)          |
 
 ### Değişmezlik kuralı
 
@@ -58,14 +58,14 @@ abonelere **tek bir bildirim dalgası** gider.
 
 ```ts
 store.transaction((tx) => {
-  tx.upsertFeatures(features);           // tam nesne: yoksa ekle, varsa değiştir
-  tx.patchFeatures([{ id, geometry }]);  // kısmi: yalnız gelen alanlar
+  tx.upsertFeatures(features); // tam nesne: yoksa ekle, varsa değiştir
+  tx.patchFeatures([{ id, geometry }]); // kısmi: yalnız gelen alanlar
   tx.removeFeatures(ids);
 
   tx.upsertLayers(layers);
   tx.patchLayer(id, { visible: false });
   tx.moveLayer(id, newParentId, index);
-  tx.removeLayers(ids);                  // alt ağaçla birlikte (cascade)
+  tx.removeLayers(ids); // alt ağaçla birlikte (cascade)
 
   tx.upsertBasemaps(basemaps);
   tx.patchBasemap(id, { opacity: 0.5 });
@@ -141,16 +141,16 @@ tx.replaceLayerContents("birlikler", snapshot);
 
 Her varlık türü için bit maskesi (const nesne, `enum` değil):
 
-| Unsur (`FEATURE_CHANGE`) | Katman (`LAYER_CHANGE`) | Altlık (`BASEMAP_CHANGE`) |
-|---|---|---|
-| `GEOMETRY` | `NAME` | `SOURCE` |
-| `STYLE` | `VISIBLE` | `VISIBLE` |
-| `PROPS` | `OPACITY` | `OPACITY` |
-| `Z` | `ZOOM` (min/max) | `ORDER` |
-| `HIDDEN` | `INTERACTION` (selectable/interactive) | `INFO` (ad, sağlayıcı, attribution…) |
-| `LAYER` (layerId) | `RENDER_GROUP` | |
-| `INTERACTION` (selectable) | `PARENT` (taşındı / sıra) | |
-| `META` | `META` | |
+| Unsur (`FEATURE_CHANGE`)   | Katman (`LAYER_CHANGE`)                | Altlık (`BASEMAP_CHANGE`)            |
+| -------------------------- | -------------------------------------- | ------------------------------------ |
+| `GEOMETRY`                 | `NAME`                                 | `SOURCE`                             |
+| `STYLE`                    | `VISIBLE`                              | `VISIBLE`                            |
+| `PROPS`                    | `OPACITY`                              | `OPACITY`                            |
+| `Z`                        | `ZOOM` (min/max)                       | `ORDER`                              |
+| `HIDDEN`                   | `INTERACTION` (selectable/interactive) | `INFO` (ad, sağlayıcı, attribution…) |
+| `LAYER` (layerId)          | `RENDER_GROUP`                         |                                      |
+| `INTERACTION` (selectable) | `PARENT` (taşındı / sıra)              |                                      |
+| `META`                     | `META`                                 |                                      |
 
 `FEATURE_CHANGE.VISUAL` = `META` hariç hepsi. MapSync yalnız `VISUAL` bitlerine bakar;
 **yalnız `META` değiştiyse unsur haritaya hiç gitmez**.
@@ -160,15 +160,15 @@ Her varlık türü için bit maskesi (const nesne, `enum` değil):
 Günlük her id için tek kayıt tutar: `{ op: ADD | UPDATE | REMOVE, mask }`.
 Bir flush'a kadar aynı id için gelen işlemler şu tabloya göre birleşir:
 
-| Önceki → Yeni | Sonuç | Neden |
-|---|---|---|
-| (yok) → X | X | |
-| ADD → UPDATE | ADD (maske OR) | Harita onu hiç görmedi; son haliyle eklenir |
-| ADD → REMOVE | **kayıt silinir** | Harita onu hiç görmedi, söylenecek bir şey yok |
-| UPDATE → UPDATE | UPDATE (maske OR) | 10 konum güncellemesi → tek kayıt |
-| UPDATE → REMOVE | REMOVE | |
-| REMOVE → ADD | UPDATE (**tüm bitler**) | Harita eskisini biliyor; yeni nesne tamamen farklı olabilir |
-| REMOVE → REMOVE | REMOVE | (olmamalı, ama zararsız) |
+| Önceki → Yeni   | Sonuç                   | Neden                                                       |
+| --------------- | ----------------------- | ----------------------------------------------------------- |
+| (yok) → X       | X                       |                                                             |
+| ADD → UPDATE    | ADD (maske OR)          | Harita onu hiç görmedi; son haliyle eklenir                 |
+| ADD → REMOVE    | **kayıt silinir**       | Harita onu hiç görmedi, söylenecek bir şey yok              |
+| UPDATE → UPDATE | UPDATE (maske OR)       | 10 konum güncellemesi → tek kayıt                           |
+| UPDATE → REMOVE | REMOVE                  |                                                             |
+| REMOVE → ADD    | UPDATE (**tüm bitler**) | Harita eskisini biliyor; yeni nesne tamamen farklı olabilir |
+| REMOVE → REMOVE | REMOVE                  | (olmamalı, ama zararsız)                                    |
 
 ### ChangeSet
 
@@ -179,8 +179,8 @@ type ChangeSet = {
   features: ReadonlyMap<string, EntityChange>;
   layers: ReadonlyMap<string, EntityChange>;
   basemaps: ReadonlyMap<string, EntityChange>;
-  structure: boolean;                  // katman ağacının şekli değişti
-  selection: ReadonlySet<string>;      // seçim durumu değişen unsur id'leri
+  structure: boolean; // katman ağacının şekli değişti
+  selection: ReadonlySet<string>; // seçim durumu değişen unsur id'leri
   hover: { prev: string | null; next: string | null } | null;
 };
 ```
@@ -190,16 +190,16 @@ flush başına bir kez çağırır. Günlük, birden fazla transaction boyunca b
 
 ## Abonelik
 
-| Abonelik | Ne zaman çağrılır |
-|---|---|
-| `subscribeFeature(id, cb)` | Bu unsur eklendi / değişti / silindi |
-| `subscribeLayer(id, cb)` | Bu katman değişti / silindi |
-| `subscribeBasemap(id, cb)` | Bu altlık değişti / silindi |
-| `subscribeStructure(cb)` | Katman ağacının şekli değişti |
-| `subscribeLayerContents(layerId, cb)` | Katmana unsur eklendi/çıktı (sayaç, ağaçta unsur listesi) |
-| `subscribeSelection(cb)` | Seçim değişti |
-| `subscribeHover(cb)` | Hover değişti |
-| `subscribeChanges(cb)` | Herhangi bir şey günlüğe yazıldı (MapSync flush planlamak için) |
+| Abonelik                              | Ne zaman çağrılır                                               |
+| ------------------------------------- | --------------------------------------------------------------- |
+| `subscribeFeature(id, cb)`            | Bu unsur eklendi / değişti / silindi                            |
+| `subscribeLayer(id, cb)`              | Bu katman değişti / silindi                                     |
+| `subscribeBasemap(id, cb)`            | Bu altlık değişti / silindi                                     |
+| `subscribeStructure(cb)`              | Katman ağacının şekli değişti                                   |
+| `subscribeLayerContents(layerId, cb)` | Katmana unsur eklendi/çıktı (sayaç, ağaçta unsur listesi)       |
+| `subscribeSelection(cb)`              | Seçim değişti                                                   |
+| `subscribeHover(cb)`                  | Hover değişti                                                   |
+| `subscribeChanges(cb)`                | Herhangi bir şey günlüğe yazıldı (MapSync flush planlamak için) |
 
 Kurallar:
 
@@ -220,7 +220,7 @@ interface MapStore {
   getBasemap(id: string): Basemap | undefined;
   getChildLayerIds(parentId: string | null): readonly string[];
   getFeatureIds(layerId: string): ReadonlySet<string>;
-  getBasemaps(): readonly Basemap[];        // order'a göre sıralı, değişince yeni referans
+  getBasemaps(): readonly Basemap[]; // order'a göre sıralı, değişince yeni referans
   getSelection(): ReadonlySet<string>;
   getHovered(): string | null;
   getUpdatedAt(featureId: string): number | undefined;
@@ -245,14 +245,14 @@ React binding'i: `useSyncExternalStore(cb => store.subscribeFeature(id, cb), () 
 
 ## Değişiklik yayılımı (kim neyi duyar)
 
-| Değişen | Harita (MapSync) | React id aboneleri | LayerTree |
-|---|---|---|---|
-| `geometry` | ✔ yeni geometri | ✔ | ✘ |
-| `style` / `props` | ✔ özellik diff'i | ✔ | ✘ (ikon gösteriliyorsa ✔ satır) |
-| `meta` | ✘ | ✔ | ✘ |
-| katman `visible` / `opacity` | ✔ alt ağaç için batch | ✔ | ✔ yalnız o satır (+ efektif görünürlüğü değişen alt satırlar) |
-| katman ekle / sil / taşı | ✔ | ✔ | ✔ ağacı yeniden kur (throttle'lı) |
-| seçim | ✔ feature-state | ✔ | ✔ seçili satırlar |
+| Değişen                      | Harita (MapSync)      | React id aboneleri | LayerTree                                                     |
+| ---------------------------- | --------------------- | ------------------ | ------------------------------------------------------------- |
+| `geometry`                   | ✔ yeni geometri       | ✔                  | ✘                                                             |
+| `style` / `props`            | ✔ özellik diff'i      | ✔                  | ✘ (ikon gösteriliyorsa ✔ satır)                               |
+| `meta`                       | ✘                     | ✔                  | ✘                                                             |
+| katman `visible` / `opacity` | ✔ alt ağaç için batch | ✔                  | ✔ yalnız o satır (+ efektif görünürlüğü değişen alt satırlar) |
+| katman ekle / sil / taşı     | ✔                     | ✔                  | ✔ ağacı yeniden kur (throttle'lı)                             |
+| seçim                        | ✔ feature-state       | ✔                  | ✔ seçili satırlar                                             |
 
 ## Canlı veri girişi (ingest)
 

@@ -9,6 +9,6 @@ export type Layer = {
   interactive?: boolean; // false → hit-test'e hiç girmez (perf)
   minZoom?: number;
   maxZoom?: number;
-  renderGroup?: boolean; // true → motor bu alt ağaç için ayrı kaynak açar (§6.3)
+  renderGroup?: boolean; // true → motor bu alt ağaç için ayrı kaynak açar (plan/design/04-sync-and-rendering.md#maplibre-render-group)
   meta?: Record<string, unknown>;
 };
