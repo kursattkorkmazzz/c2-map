@@ -64,7 +64,7 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 - [x] `createMapStore({ now? })`
 - [x] İç yapılar: `features`, `layers`, `basemaps`, `childLayerIds`, `featureIdsByLayer`, `selection`, `hovered`, `updatedAt` (+ `revs`)
 - [x] Okuma API'si: `getFeature`, `getLayer`, `getBasemap`, `getChildLayerIds`, `getFeatureIds`, `getBasemaps`, `getSelection`, `getHovered`, `getUpdatedAt`, `stats`
-  - `getBasemaps` şimdilik sırasız; sıralama + önbellek 0.2.7'de
+  - `getBasemaps` sıralama + önbellek 0.2.7'de eklendi
 
 ### 0.2.5 Transaction ve unsur işlemleri
 
@@ -91,9 +91,10 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.7 Altlık işlemleri
 
-- [ ] `upsertBasemaps`, `patchBasemap`, `removeBasemaps`
-- [ ] `exclusiveGroup`: biri açılınca aynı gruptakiler kapanır
-- [ ] `getBasemaps()` `order`'a göre sıralı, değişince yeni referans
+- [x] `upsertBasemaps`, `patchBasemap` (olmayan id → `stats.ignoredPatches`), `removeBasemaps`
+- [x] `exclusiveGroup`: görünür hale gelen (veya görünürken gruba geçen) altlık, gruptaki diğer görünürleri kapatır; aynı pakette sonuncu kazanır
+- [x] `getBasemaps()` `order`'a göre sıralı (eşitlikte ekleme sırası), önbellekli; değişince yeni referans
+- [x] Testler (`map-store.basemaps.test.ts`): CRUD, sıra, önbellek referansı, grup kuralı senaryoları
 
 ### 0.2.8 Snapshot — `replaceLayerContents`
 

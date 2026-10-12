@@ -158,6 +158,16 @@ Uygulama ayrıntıları (kod: `store/map-store.ts`):
 `exclusiveGroup` kuralı (aynı gruptan biri açılınca diğerlerini kapat) store'da uygulanır:
 `visible: true` yapılan altlık, aynı gruptaki diğerlerini aynı transaction içinde kapatır.
 
+Uygulama ayrıntıları:
+
+- Kural, altlık **görünür hale geldiğinde** (eklenirken görünür, kapalıdan açığa geçti) veya
+  **görünürken başka bir gruba geçtiğinde** çalışır. Kapanan altlıklar günlüğe `VISIBLE` biti ile yazılır.
+- Aynı pakette aynı gruptan iki görünür altlık gelirse **sonuncu kazanır**.
+- Kapatmak başkasını açmaz; grupta hiç açık altlık kalmayabilir.
+- Altlık değişiklikleri `structure` bayrağını etkilemez (katman ağacından ayrıdır).
+- `getBasemaps()` `order`'a göre artan sıralıdır (eşitlikte ekleme sırası) ve **önbelleklidir**:
+  değişiklik olmadıkça aynı dizi döner.
+
 ### Yeniden bağlanma ve snapshot
 
 ```ts

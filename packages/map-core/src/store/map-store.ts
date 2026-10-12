@@ -5,20 +5,23 @@
 // Tüm yazmalar `transaction(tx => …)` içinden yapılır; her yazma değişiklik günlüğüne
 // (ChangeJournal) düşer ve MapSync bunu `drainChanges()` ile alır.
 //
-// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur) ve 0.2.6 (katman) hazır.
-// Altlık (0.2.7), snapshot (0.2.8), seçim/hover (0.2.9) ve abonelik (0.2.10)
+// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur), 0.2.6 (katman) ve
+// 0.2.7 (altlık) hazır. Snapshot (0.2.8), seçim/hover (0.2.9) ve abonelik (0.2.10)
 // işlemleri sonraki adımlarda bu dosyaya eklenecek.
 
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
 import type { Layer } from "../model/layer";
-import { CHANGE_OP, LAYER_CHANGE, type ChangeSet } from "./change";
+import { BASEMAP_CHANGE, CHANGE_OP, LAYER_CHANGE, type ChangeSet } from "./change";
 import { ChangeJournal, ENTITY_KIND } from "./change-journal";
 import {
+  diffBasemap,
   diffFeature,
   diffLayer,
+  mergeBasemapPatch,
   mergeFeaturePatch,
   mergeLayerPatch,
+  type BasemapPatch,
   type FeaturePatch,
   type LayerPatch,
 } from "./diff";
@@ -61,6 +64,16 @@ export interface MapTx {
   moveLayer(id: string, parentId: string | null, index?: number): void;
   /** Katmanı alt ağacıyla (alt katmanlar + tüm unsurları) birlikte siler. */
   removeLayers(ids: readonly string[]): void;
+
+  /**
+   * Tam nesne: yoksa ekler, varsa değiştirir. `exclusiveGroup` kuralı: görünür hale gelen
+   * altlık, aynı gruptaki diğer görünür altlıkları kapatır (aynı pakette ikisi açıksa sonuncu kazanır).
+   */
+  upsertBasemaps(basemaps: readonly Basemap[]): void;
+  /** Kısmi güncelleme. Olmayan id yok sayılır. `exclusiveGroup` kuralı burada da geçerli. */
+  patchBasemap(id: string, patch: BasemapPatch): void;
+  /** Siler. Olmayan id sessizce yok sayılır. */
+  removeBasemaps(ids: readonly string[]): void;
 }
 
 export interface MapStore {
@@ -77,7 +90,7 @@ export interface MapStore {
    * yeniden okuyun.
    */
   getFeatureIds(layerId: string): ReadonlySet<string>;
-  /** `order`'a göre sıralı altlıklar. */
+  /** `order`'a göre artan sıralı altlıklar (eşitlikte ekleme sırası). Değişince yeni dizi referansı. */
   getBasemaps(): readonly Basemap[];
   /** Seçili unsurlar. Değişince yeni küme referansı. */
   getSelection(): ReadonlySet<string>;
@@ -113,6 +126,8 @@ class MapStoreImpl implements MapStore {
   private readonly features = new Map<string, Feature>();
   private readonly layers = new Map<string, Layer>();
   private readonly basemaps = new Map<string, Basemap>();
+  /** `getBasemaps()` önbelleği; altlıklarda her değişiklikte `null` yapılır. */
+  private sortedBasemaps: readonly Basemap[] | null = null;
 
   // İndeksler
   private readonly childLayerIds = new Map<string | null, readonly string[]>();
@@ -148,6 +163,9 @@ class MapStoreImpl implements MapStore {
       patchLayer: (id, patch) => this.guard(() => this.patchLayer(id, patch)),
       moveLayer: (id, parentId, index) => this.guard(() => this.moveLayer(id, parentId, index)),
       removeLayers: (ids) => this.guard(() => this.removeLayers(ids)),
+      upsertBasemaps: (basemaps) => this.guard(() => this.upsertBasemaps(basemaps)),
+      patchBasemap: (id, patch) => this.guard(() => this.patchBasemap(id, patch)),
+      removeBasemaps: (ids) => this.guard(() => this.removeBasemaps(ids)),
     };
   }
 
@@ -174,8 +192,15 @@ class MapStoreImpl implements MapStore {
   }
 
   getBasemaps(): readonly Basemap[] {
-    // 0.2.7'de sıralı ve önbellekli hale gelecek.
-    return this.basemaps.size === 0 ? EMPTY_BASEMAPS : [...this.basemaps.values()];
+    // Önbellek: değişiklik olmadıkça aynı dizi döner (React useSyncExternalStore buna güvenir).
+    if (!this.sortedBasemaps) {
+      this.sortedBasemaps =
+        this.basemaps.size === 0
+          ? EMPTY_BASEMAPS
+          : // Array.prototype.sort kararlıdır: eşit `order`'da ekleme sırası korunur.
+            [...this.basemaps.values()].sort((a, b) => a.order - b.order);
+    }
+    return this.sortedBasemaps;
   }
 
   getSelection(): ReadonlySet<string> {
@@ -419,6 +444,67 @@ class MapStoreImpl implements MapStore {
     const next = this.getChildLayerIds(parentId).filter((childId) => childId !== id);
     if (next.length === 0) this.childLayerIds.delete(parentId);
     else this.childLayerIds.set(parentId, next);
+  }
+
+  // ── Altlık işlemleri ───────────────────────────────────────────
+
+  private upsertBasemaps(basemaps: readonly Basemap[]): void {
+    for (const next of basemaps) {
+      const prev = this.basemaps.get(next.id);
+      if (prev) {
+        this.replaceBasemap(prev, next);
+        continue;
+      }
+      this.basemaps.set(next.id, next);
+      this.sortedBasemaps = null;
+      this.journal.record(ENTITY_KIND.BASEMAP, next.id, CHANGE_OP.ADD);
+      if (next.visible) this.enforceExclusiveGroup(next);
+    }
+  }
+
+  private patchBasemap(id: string, patch: BasemapPatch): void {
+    const prev = this.basemaps.get(id);
+    if (!prev) {
+      this.mutableStats.ignoredPatches++;
+      return;
+    }
+    this.replaceBasemap(prev, mergeBasemapPatch(prev, patch));
+  }
+
+  private replaceBasemap(prev: Basemap, next: Basemap): void {
+    const mask = diffBasemap(prev, next);
+    if (mask === 0) return;
+
+    this.basemaps.set(next.id, next);
+    this.sortedBasemaps = null;
+    this.journal.record(ENTITY_KIND.BASEMAP, next.id, CHANGE_OP.UPDATE, mask);
+
+    // Görünür hale geldi ya da görünürken başka bir gruba geçti → grubunda tek açık o olmalı.
+    if (next.visible && (!prev.visible || prev.exclusiveGroup !== next.exclusiveGroup)) {
+      this.enforceExclusiveGroup(next);
+    }
+  }
+
+  private removeBasemaps(ids: readonly string[]): void {
+    for (const id of ids) {
+      if (!this.basemaps.delete(id)) continue;
+      this.sortedBasemaps = null;
+      this.journal.record(ENTITY_KIND.BASEMAP, id, CHANGE_OP.REMOVE);
+    }
+  }
+
+  /** `winner` görünür: aynı `exclusiveGroup`'taki diğer görünür altlıkları kapatır (radyo davranışı). */
+  private enforceExclusiveGroup(winner: Basemap): void {
+    const group = winner.exclusiveGroup;
+    if (group === undefined) return;
+
+    for (const other of this.basemaps.values()) {
+      if (other.id === winner.id || !other.visible || other.exclusiveGroup !== group) continue;
+      // Var olan anahtarı güncellemek Map gezinmesini bozmaz.
+      this.basemaps.set(other.id, { ...other, visible: false });
+      this.sortedBasemaps = null;
+      this.journal.record(ENTITY_KIND.BASEMAP, other.id, CHANGE_OP.UPDATE, BASEMAP_CHANGE.VISIBLE);
+    }
   }
 
   // Yetim unsur (katmanı henüz yok) de indekslenir: katman sonradan gelince unsurları hazırdır.
