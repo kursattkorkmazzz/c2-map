@@ -5,13 +5,13 @@
 **Amaç:** APP-6 birlikler canlı ve her zoom'da okunur.
 
 ## Açık kararlar (başlamadan)
-- [ ] #17 LOD eşikleri (Faz 0.5 LOD spike'ı ile)
+- [ ] #17 LOD eşikleri — 3.5'teki ölçümle belirlenir (önce ölç, sonra karar ver)
 - [ ] #18 Etiketler: hangi zoom, hangi motor
 
 ## 3.1 `@c2/map-symbology`
 Tasarım: [08](../design/08-extensibility-symbology.md#askeri-semboloji)
-- [ ] `SymbologyProvider` arayüzü, `SymbologyRegistry` implementasyonu
-- [ ] Ortak önbellek + çapa ortalama + rasterize yardımcıları
+- [ ] Sağlayıcılar için ortak önbellek + çapa ortalama + rasterize yardımcıları
+  (`SymbologyProvider` arayüzü ve `SymbologyRegistry` çekirdekte hazır — Faz 0.6)
 
 ## 3.2 `@c2/map-symbology-app6`
 - [ ] `milsymbol` tabanlı APP-6(D) sağlayıcısı
@@ -31,6 +31,8 @@ Tasarım: [04](../design/04-sync-and-rendering.md#askeri-semboller-ve-ikonlar)
 Tasarım: [04](../design/04-sync-and-rendering.md#zooma-göre-gösterim-lod)
 - [ ] Uzak zoom: nokta (`ScatterplotLayer`), yakın zoom: sembol
 - [ ] Eşikler kind/katman bazında; geçişte veri yeniden gönderilmez
+- [ ] **Ölçüm** ([Faz 1.5](phase-1.5-perf.md) altyapısıyla): nokta modunda 50k'da çizim/sn, sembol ↔ nokta
+      geçiş eşiği adayları; sonuç → karar #17 ve [spike/findings.md](../spike/findings.md)
 
 ## 3.6 Ingest Worker
 Tasarım: [03](../design/03-store.md#canlı-veri-girişi-ingest)

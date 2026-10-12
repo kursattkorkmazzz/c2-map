@@ -17,10 +17,11 @@ Tasarım: [04](../design/04-sync-and-rendering.md#sunum-aşaması-kümeleme-içi
 - [ ] Sentetik `cluster:…` id'leri, `CLUSTER_CLICK` olayı
 - [ ] Sembol-farkında kümeleme (`clusterKey(f)`)
 - [ ] Seçili unsur içeren kümenin vurgulanması
+- [ ] **Ölçüm** ([Faz 1.5](phase-1.5-perf.md) altyapısıyla): 50k'da kümeleme maliyeti (zoom değişiminde ve 1 Hz akışta)
 
 ## 4.3 Vektör stil altlıkları
 - [ ] Style birleştirme (id öneki), glyph/sprite çakışma çözümü
 
 ## 4.4 Ölçek
 - [ ] (Gerekirse) akıcı hareketin ara konum hesabını shader'a taşıma
-- [ ] Hedef donanımda 50k ölçümü
+- [ ] Hedef donanımda 50k ölçümü (LOD + kümeleme açıkken; Faz 1.5'teki ölçümün tekrarı)

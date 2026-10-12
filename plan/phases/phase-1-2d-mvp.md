@@ -5,7 +5,8 @@
 **Amaç:** Canlı akışı çizen, LayerTree ile yönetilen ilk çalışan sürüm.
 
 **Bitti sayılması için:** demo uygulamasında 10k canlı birlik + kontrol tedbirleri + altlıklar;
-LayerTree'den katman aç/kapa; [bütçeler](../design/04-sync-and-rendering.md#hedef-bütçeler) tutuyor.
+LayerTree'den katman aç/kapa; yük üreteci ve ölçüm paneli çalışıyor. Bütçelerin ölçümle
+doğrulanması [Faz 1.5](phase-1.5-perf.md)'te.
 
 ## Açık kararlar (başlamadan)
 - [ ] #10 Backend mesaj formatı ([decisions](../decisions.md))
@@ -53,8 +54,10 @@ Tasarım: [06](../design/06-layer-tree.md)
 - [ ] Throttle'lı `rebuildTree`; satır bazlı abonelik
 - [ ] (Karar #14'e göre) sanallaştırılmış unsur satırları
 
-## 1.6 Demo ve ölçüm
+## 1.6 Demo
 Tasarım: [10](../design/10-testing.md)
-- [ ] Demo uygulaması (spike'tan yük üreteci + ölçüm paneli)
+- [ ] Demo uygulaması (spike'tan uyarlanan yük üreteci + ölçüm paneli, gerçek paketlerle)
 - [ ] Akış bağlantısı örneği: delta → transaction, reconnect → `replaceLayerContents`
-- [ ] Gerçek GPU ile otomatik perf testi (Playwright)
+- [ ] String `promoteId` ile `updateData` (statik yol) — davranış [Faz 1.5](phase-1.5-perf.md)'te ölçülür
+
+Ölçümler ve otomatik perf testi: [Faz 1.5](phase-1.5-perf.md).

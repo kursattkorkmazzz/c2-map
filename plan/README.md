@@ -16,15 +16,16 @@
 - **"Neden böyle?" için:** [`design/`](design/) altındaki tasarım dokümanları. Faz dosyaları
   ilgili tasarım bölümüne link verir.
 - **Kararlar ve açık sorular:** [`decisions.md`](decisions.md) (karar kaydı + açık kararlar).
-- **Ölçümler:** [`spike/findings.md`](spike/findings.md) (`apps/map-spike` sonuçları).
+- **Ölçümler:** [`spike/findings.md`](spike/findings.md) — `apps/map-spike` **prototipinin** sonuçları
+  (referans değerler). Gerçek paketlerle doğrulama Faz 1.5'te.
 
 ## Faz durumu
 
 | Faz | Dosya | Kapsam | Durum |
 |---|---|---|---|
 | 0 | [phase-0-core.md](phases/phase-0-core.md) | `@c2/map-core`: modeller, MapStore, MapSync, EventRouter, adapter sözleşmesi, MockAdapter | ✅ (bayatlık zamanlayıcısı sonraya) |
-| 0.5 | [phase-0.5-spike.md](phases/phase-0.5-spike.md) | Perf spike (`apps/map-spike`) | ✅ (LOD spike'ı kaldı) |
 | 1 | [phase-1-2d-mvp.md](phases/phase-1-2d-mvp.md) | MapLibre + deck.gl adapter, React binding, LayerTree, demo | ⬜ |
+| 1.5 | [phase-1.5-perf.md](phases/phase-1.5-perf.md) | Performans doğrulaması (gerçek paketlerle; spike sayıları referans) | ⬜ |
 | 2 | [phase-2-interaction.md](phases/phase-2-interaction.md) | Seçim, hover, olaylar, overlay, çizim/düzenleme, MGRS | ⬜ |
 | 3 | [phase-3-symbology.md](phases/phase-3-symbology.md) | APP-6 semboloji, etiket, LOD, ingest Worker | ⬜ |
 | 4 | [phase-4-composite-scale.md](phases/phase-4-composite-scale.md) | Composite, kümeleme, vektör altlık birleştirme | ⬜ |

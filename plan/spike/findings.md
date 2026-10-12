@@ -1,6 +1,11 @@
 # Spike bulguları (`apps/map-spike`)
 
-← [Plan ana sayfası](../README.md) · Faz: [0.5](../phases/phase-0.5-spike.md)
+← [Plan ana sayfası](../README.md) · Doğrulama fazı: [1.5](../phases/phase-1.5-perf.md)
+
+> **Durum:** Bu sayılar bir **prototipten** (`apps/map-spike`: kendi sade store'u, doğrudan
+> MapLibre/deck.gl çağrıları) gelir ve mimari kararlara yön vermek için kullanıldı. Gerçek paketlerle
+> (`@c2/map-core` + `@c2/map-maplibre`) yapılmış bir ölçüm değildir; aynı senaryolar
+> [Faz 1.5](../phases/phase-1.5-perf.md)'te tekrarlanıp buraya karşılaştırma olarak eklenecek.
 
 Teoriyi ölçümle doğrulamak için ayrı bir deneme uygulaması yazıldı: sahte backend (her birlik
 saniyede 1 mesaj), sade bir store, dört çizim modu ve canlı ölçüm paneli.
@@ -66,12 +71,22 @@ Sürümler: MapLibre GL JS 6.14, deck.gl 9.4, milsymbol 3.0.4 (APP-6 D).
 - **milsymbol çapası:** Sembolün çapa noktası (çerçeve merkezi) görüntünün ortasında değil
   (kademe işareti üstte). Sembol, çapa ortaya gelecek şekilde boşluklu bir tuvale çiziliyor.
 
-## Doğrulananlar / kalanlar
+## Prototipte gözlenenler / gerçek paketlerle doğrulanacaklar
 
-- ✅ `updateData` maliyeti: 10k'ya kadar kabul edilebilir, 50k'da harita donuyor.
-- ✅ deck.gl ikili dizilerle 50k × 1 Hz: ana thread ~3 ms/sn, her flush ekrana yansıyor.
-- ✅ APP-6 sembol önbelleği: 50k birlik → 240 görüntü.
-- ⏳ String `promoteId` ile `updateData` davranışı (spike sayısal `feature.id` kullandı).
-- ⏳ Sembol çakışma (collision) hesabının maliyeti — spike'ta açılıp kapatılabiliyor, sistematik ölçülmedi.
-- ⏳ LOD: eşik değerleri, nokta modunda 50k'da çizim/sn, kümeleme maliyeti.
-- ⏳ Hedef donanımda yeniden ölçüm.
+Prototipte gözlenen (gerçek paketlerle tekrarı [Faz 1.5](../phases/phase-1.5-perf.md)'te):
+
+- `updateData` maliyeti: 10k'ya kadar kabul edilebilir, 50k'da harita donuyor.
+- deck.gl ikili dizilerle 50k × 1 Hz: ana thread ~3 ms/sn, her flush ekrana yansıyor.
+- APP-6 sembol önbelleği: 50k birlik → 240 görüntü.
+
+Prototipte hiç ölçülmeyen:
+
+- String `promoteId` ile `updateData` davranışı (spike sayısal `feature.id` kullandı) → Faz 1.5
+- Sembol çakışma (collision) hesabının maliyeti → Faz 1.5
+- LOD eşikleri, nokta modunda 50k'da çizim/sn → Faz 3.5
+- Kümeleme maliyeti → Faz 4.2
+- Hedef donanımda ölçüm → Faz 1.5 (ve Faz 4.4'te tekrar)
+
+## Gerçek paketlerle karşılaştırma
+
+_Faz 1.5'te doldurulacak: her senaryo için spike değeri ↔ gerçek boru hattı değeri._

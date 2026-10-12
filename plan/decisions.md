@@ -8,6 +8,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-13 | Faz 0.5 (spike) "tamamlandı" sayılmaz; **Faz 1.5 — Performans doğrulaması** olarak Faz 1'in arkasına taşındı. LOD ölçümü Faz 3.5'e, kümeleme ölçümü Faz 4.2'ye | Spike bir prototipti (kendi store'u, doğrudan motor çağrıları); gerçek paketlerle test ancak adapter ve demo hazır olunca mümkün. Spike sayıları referans değer olarak kalır | [phase-1.5](phases/phase-1.5-perf.md), [spike](spike/findings.md) |
 | 2026-10-12 | Plan birden fazla dosyaya bölündü (rev. 4): `design/`, `phases/`, `spike/`, `decisions.md` | Faz faz takip edilebilsin | [README](README.md) |
 | 2026-10-12 | **`Feature.origin` / `FeatureOrigin` kaldırıldı** | Unsurun kaynağı ömrü boyunca değişir (çizim → backend → refresh → düzenleme) | [02](design/02-core-model.md#neden-featureorigin-yok) |
 | 2026-10-12 | Yeniden bağlanmada silme kapsamı katman bazında: `tx.replaceLayerContents(layerId, snapshot)` (`replaceRemote` yerine geçti) | Her akış hangi katmanları beslediğini bilir; diğer katmanlara dokunulmaz | [03](design/03-store.md#yeniden-bağlanma-ve-snapshot) |
@@ -31,7 +32,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma (glyph/sprite çakışması) | Faz 4 |
 | 14 | Unsurlar LayerTree'de mi? | ⏳ Hangi katmanlar unsurlarını ağaçta listeler (sanallaştırma şart) | Faz 1 |
 | 16 | deck.gl ↔ MapLibre 6 | ✅ Dokümana göre entegre; spike'taki `map.transform` hatası test edilecek | Faz 1 |
-| 17 | LOD eşikleri | ⏳ Hangi zoom'da nokta → sembol (LOD spike'ı ile) | Faz 3 |
+| 17 | LOD eşikleri | ⏳ Hangi zoom'da nokta → sembol (Faz 3.5'teki ölçümle) | Faz 3 |
 | 18 | Etiketler | ⏸ Hangi zoom'dan itibaren; MapLibre mi deck.gl `TextLayer` mı | Faz 3 |
 | 19 | Hedef donanım | ⏸ Değişken; tasarım düşük donanımda da çalışacak şekilde (LOD, `auto` hareket) | Faz 1 ölçümleri |
 | 20 | Taslak (draft) nerede yaşar | ⏳ Store'da `drafts` haritası mı, ayrı `EditSession` mı | Faz 2 |
