@@ -5,16 +5,23 @@
 // Tüm yazmalar `transaction(tx => …)` içinden yapılır; her yazma değişiklik günlüğüne
 // (ChangeJournal) düşer ve MapSync bunu `drainChanges()` ile alır.
 //
-// Durum: 0.2.4 (iç yapılar + okuma) ve 0.2.5 (transaction + unsur işlemleri) hazır.
-// Katman (0.2.6), altlık (0.2.7), snapshot (0.2.8), seçim/hover (0.2.9) ve abonelik (0.2.10)
+// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur) ve 0.2.6 (katman) hazır.
+// Altlık (0.2.7), snapshot (0.2.8), seçim/hover (0.2.9) ve abonelik (0.2.10)
 // işlemleri sonraki adımlarda bu dosyaya eklenecek.
 
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
 import type { Layer } from "../model/layer";
-import { CHANGE_OP, type ChangeSet } from "./change";
+import { CHANGE_OP, LAYER_CHANGE, type ChangeSet } from "./change";
 import { ChangeJournal, ENTITY_KIND } from "./change-journal";
-import { diffFeature, mergeFeaturePatch, type FeaturePatch } from "./diff";
+import {
+  diffFeature,
+  diffLayer,
+  mergeFeaturePatch,
+  mergeLayerPatch,
+  type FeaturePatch,
+  type LayerPatch,
+} from "./diff";
 
 // ── Genel API ────────────────────────────────────────────────────
 
@@ -26,7 +33,7 @@ export type MapStoreOptions = {
 export type MapStoreStats = {
   /** `rev`'i eski veya eşit olduğu için düşürülen yazmalar. */
   readonly droppedStale: number;
-  /** Store'da olmayan id'ye gelen (yok sayılan) patch'ler. */
+  /** Store'da olmayan id'ye gelen (yok sayılan) patch'ler (unsur ve katman). */
   readonly ignoredPatches: number;
 };
 
@@ -38,6 +45,22 @@ export interface MapTx {
   patchFeatures(patches: readonly FeaturePatch[]): void;
   /** Siler; seçimden ve hover'dan da düşürür. Olmayan id sessizce yok sayılır. */
   removeFeatures(ids: readonly string[]): void;
+
+  /**
+   * Tam nesne: yeni katman ebeveyninin **sonuna** eklenir. Var olan katmanda `parentId`
+   * değişirse yeni ebeveynin sonuna taşınır. Döngü oluşturacaksa hata fırlatır.
+   */
+  upsertLayers(layers: readonly Layer[]): void;
+  /** Kısmi güncelleme. Olmayan id yok sayılır. `parentId` verilirse taşıma gibi davranır. */
+  patchLayer(id: string, patch: LayerPatch): void;
+  /**
+   * Katmanı `parentId` altında `index` konumuna taşır (varsayılan: sona). `index` taşımadan
+   * SONRAKİ sırayı ifade eder ve [0, kardeş sayısı] aralığına sıkıştırılır.
+   * Olmayan katman veya döngü (katmanı kendi altına taşımak) → hata, işlem uygulanmaz.
+   */
+  moveLayer(id: string, parentId: string | null, index?: number): void;
+  /** Katmanı alt ağacıyla (alt katmanlar + tüm unsurları) birlikte siler. */
+  removeLayers(ids: readonly string[]): void;
 }
 
 export interface MapStore {
@@ -121,6 +144,10 @@ class MapStoreImpl implements MapStore {
       upsertFeatures: (features) => this.guard(() => this.upsertFeatures(features)),
       patchFeatures: (patches) => this.guard(() => this.patchFeatures(patches)),
       removeFeatures: (ids) => this.guard(() => this.removeFeatures(ids)),
+      upsertLayers: (layers) => this.guard(() => this.upsertLayers(layers)),
+      patchLayer: (id, patch) => this.guard(() => this.patchLayer(id, patch)),
+      moveLayer: (id, parentId, index) => this.guard(() => this.moveLayer(id, parentId, index)),
+      removeLayers: (ids) => this.guard(() => this.removeLayers(ids)),
     };
   }
 
@@ -280,6 +307,118 @@ class MapStoreImpl implements MapStore {
   private touch(id: string, rev: number | undefined): void {
     this.updatedAt.set(id, this.now());
     if (rev !== undefined) this.revs.set(id, rev);
+  }
+
+  // ── Katman işlemleri ───────────────────────────────────────────
+
+  private upsertLayers(layers: readonly Layer[]): void {
+    for (const next of layers) {
+      const prev = this.layers.get(next.id);
+      if (prev) {
+        this.replaceLayer(prev, next);
+        continue;
+      }
+      // Yeni katman da döngü oluşturabilir: daha önce `parentId`'si bu id olan yetim katmanlar
+      // varsa ve yeni katman onlardan birinin altına konuyorsa.
+      this.assertNoCycle(next.id, next.parentId);
+      this.layers.set(next.id, next);
+      this.insertChild(next.parentId, next.id);
+      this.journal.record(ENTITY_KIND.LAYER, next.id, CHANGE_OP.ADD);
+      this.journal.markStructure();
+    }
+  }
+
+  private patchLayer(id: string, patch: LayerPatch): void {
+    const prev = this.layers.get(id);
+    if (!prev) {
+      this.mutableStats.ignoredPatches++;
+      return;
+    }
+    this.replaceLayer(prev, mergeLayerPatch(prev, patch));
+  }
+
+  /** Var olan katmanı yenisiyle değiştirir; ebeveyn değiştiyse yeni ebeveynin sonuna taşır. */
+  private replaceLayer(prev: Layer, next: Layer): void {
+    const parentChanged = prev.parentId !== next.parentId;
+    if (parentChanged) this.assertNoCycle(next.id, next.parentId);
+
+    const mask = diffLayer(prev, next);
+    if (mask === 0) return;
+
+    if (parentChanged) {
+      this.removeChild(prev.parentId, next.id);
+      this.insertChild(next.parentId, next.id);
+      this.journal.markStructure();
+    }
+    this.layers.set(next.id, next);
+    this.journal.record(ENTITY_KIND.LAYER, next.id, CHANGE_OP.UPDATE, mask);
+  }
+
+  private moveLayer(id: string, parentId: string | null, index?: number): void {
+    const prev = this.layers.get(id);
+    if (!prev) throw new Error(`moveLayer: katman yok (${id}).`);
+    this.assertNoCycle(id, parentId);
+
+    const sameParent = prev.parentId === parentId;
+    const current = this.getChildLayerIds(parentId);
+    const siblings = current.filter((childId) => childId !== id);
+    const target = Math.min(Math.max(index ?? siblings.length, 0), siblings.length);
+
+    if (sameParent && current.indexOf(id) === target) return; // yer değişmiyor
+
+    if (!sameParent) this.removeChild(prev.parentId, id);
+    const nextIds = [...siblings];
+    nextIds.splice(target, 0, id);
+    this.childLayerIds.set(parentId, nextIds);
+
+    if (!sameParent) this.layers.set(id, { ...prev, parentId });
+    this.journal.record(ENTITY_KIND.LAYER, id, CHANGE_OP.UPDATE, LAYER_CHANGE.PARENT);
+    this.journal.markStructure();
+  }
+
+  private removeLayers(ids: readonly string[]): void {
+    for (const id of ids) this.removeLayerTree(id);
+  }
+
+  /** Katmanı alt katmanları ve tüm unsurlarıyla birlikte siler (önce çocuklar). */
+  private removeLayerTree(id: string): void {
+    const layer = this.layers.get(id);
+    if (!layer) return;
+
+    // Çocuk listesi her değişimde yeni dizi olur (yerinde değişmez); eski referansı gezmek güvenli.
+    for (const childId of this.getChildLayerIds(id)) this.removeLayerTree(childId);
+
+    const featureIds = this.featureIdsByLayer.get(id);
+    if (featureIds) this.removeFeatures([...featureIds]);
+
+    this.childLayerIds.delete(id);
+    this.removeChild(layer.parentId, id);
+    this.layers.delete(id);
+    this.journal.record(ENTITY_KIND.LAYER, id, CHANGE_OP.REMOVE);
+    this.journal.markStructure();
+  }
+
+  /** `id` katmanı `parentId` altına konursa döngü oluşur mu? Oluşursa hata fırlatır. */
+  private assertNoCycle(id: string, parentId: string | null): void {
+    let current = parentId;
+    for (let guard = 0; current !== null; guard++) {
+      if (current === id) {
+        throw new Error(`Katman döngüsü: "${id}" kendi alt ağacına (${parentId}) konamaz.`);
+      }
+      if (guard > this.layers.size) break; // var olan bozuk veriye karşı sonsuz döngü koruması
+      current = this.layers.get(current)?.parentId ?? null;
+    }
+  }
+
+  /** Çocuk listesine ekler. Liste yerinde değişmez, yeni dizi yazılır (React referansa güvenir). */
+  private insertChild(parentId: string | null, id: string): void {
+    this.childLayerIds.set(parentId, [...this.getChildLayerIds(parentId), id]);
+  }
+
+  private removeChild(parentId: string | null, id: string): void {
+    const next = this.getChildLayerIds(parentId).filter((childId) => childId !== id);
+    if (next.length === 0) this.childLayerIds.delete(parentId);
+    else this.childLayerIds.set(parentId, next);
   }
 
   // Yetim unsur (katmanı henüz yok) de indekslenir: katman sonradan gelince unsurları hazırdır.

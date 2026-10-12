@@ -80,13 +80,14 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.6 Katman işlemleri
 
-- [ ] `upsertLayers` — yeni katman ebeveynin sonuna; `parentId` değişirse taşınır
-- [ ] `patchLayer`
-- [ ] `moveLayer(id, parentId, index)` — döngü kontrolü (kendi altına taşınamaz → hata)
-- [ ] `removeLayers` — cascade (alt katmanlar + unsurları)
-- [ ] `structure` bayrağı ekle/sil/taşı'da set edilir
-- [ ] `childLayerIds` dizileri değişince yeni referans
-- [ ] Testler: sıra, taşıma, döngü reddi, cascade silme
+- [x] `upsertLayers` — yeni katman ebeveynin sonuna; `parentId` değişirse taşınır; yetim katman kabul edilir
+- [x] `patchLayer` — olmayan id yok sayılır (`stats.ignoredPatches`); `parentId` verilirse taşıma
+- [x] `moveLayer(id, parentId, index)` — döngü kontrolü (kendi altına taşınamaz → hata); index sıkıştırılır; aynı yer → no-op
+- [x] Döngü kontrolü upsert'te de (yetim zincirle kurulan döngü dahil)
+- [x] `removeLayers` — cascade (alt katmanlar + unsurları)
+- [x] `structure` bayrağı ekle/sil/taşı'da set edilir
+- [x] `childLayerIds` dizileri değişince yeni referans; değişmeyenler aynı kalır
+- [x] Testler (`map-store.layers.test.ts`): sıra, taşıma, döngü reddi, cascade silme, referanslar
 
 ### 0.2.7 Altlık işlemleri
 

@@ -132,9 +132,25 @@ sayaçla raporlanır (`store.stats.droppedStale`). `rev` yoksa her zaman uygulan
 - **upsert:** Yeni katman, ebeveyninin `childLayerIds` listesinin **sonuna** eklenir.
   Var olan katmanda `parentId` değişirse yeni ebeveynin sonuna taşınır.
 - **move(id, parentId, index):** Sırayı ve ebeveyni değiştirir. **Döngü kontrolü:** katman
-  kendi altına taşınamaz → hata fırlatılır (transaction yarıda kalmaz; işlem reddedilir).
+  kendi altına taşınamaz → hata fırlatılır (işlem reddedilir; o transaction'da daha önce yapılan
+  yazmalar kalır, bkz. transaction kuralları).
 - **remove:** **Cascade**: alt katmanlar ve tüm unsurları da silinir.
 - Ağaç şekli değiştiğinde (ekle / sil / taşı) günlükte `structure = true` olur.
+
+Uygulama ayrıntıları (kod: `store/map-store.ts`):
+
+- **Yetim katman** (ebeveyni henüz yok) kabul edilir; `getChildLayerIds(ebeveynId)` altında durur,
+  ebeveyn eklenince ağaçta görünür. Yetim unsurlarla aynı mantık.
+- **Döngü kontrolü** taşımanın yanı sıra **upsert'te de** yapılır: yetim katmanlar sayesinde yeni
+  eklenen bir katman da döngü kurabilir (`b → a` varken `a → b` eklemek). Döngü → hata, işlem
+  uygulanmaz (ağaç değişmez).
+- **`moveLayer(id, parentId, index)`:** `index` taşımadan *sonraki* konumdur, `[0, kardeş sayısı]`
+  aralığına sıkıştırılır, verilmezse sona. Aynı yere taşımak hiçbir şey yapmaz. Olmayan katman → hata
+  (UI işlemi; sessizce yutulmamalı). `patchLayer` ise olmayan id'yi yok sayar (akış verisi gibi davranır).
+- Kardeşler arası sıra değişiminde günlüğe yalnız **taşınan** katman `PARENT` bitiyle yazılır;
+  kardeşlerin sırası `structure = true` olduğu için MapSync tarafından zaten yeniden hesaplanır.
+- **Cascade silme** önce çocukları, sonra katmanın unsurlarını, en son katmanı siler. Unsurun
+  `layerId`'si başka (yetim) olan unsurlar etkilenmez.
 
 ### Altlıklar
 
