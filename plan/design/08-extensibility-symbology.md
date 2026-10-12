@@ -12,6 +12,19 @@
 3. **`BasemapProviderRegistry`:** firma-özel auth, URL dönüşümü, `custom:*` kaynak tipleri.
 4. **`SymbologyRegistry`:** aşağıda.
 
+Uygulama ayrıntıları (kod: `src/registry/`):
+
+- Tüm registry'ler aynı kuralı izler: aynı anahtarı ikinci kez kaydetmek **hata**; bilinçli
+  değiştirme `{ replace: true }` ile. `register` geri alma fonksiyonu döner (yalnız hâlâ aynı
+  nesne kayıtlıysa siler).
+- `FeatureKindRegistry.withDefaults(f)`: `defaultStyle` / `defaultProps` unsurun değerleriyle sığ
+  birleşir (unsurun değeri baskın); varsayılan yoksa aynı referans döner.
+- `FeatureKindRegistry.resolveFor(f, isSupported)`: motorun desteklediği kind'e ulaşana kadar
+  fallback zincirini izler (en fazla 8 adım; döngülü tanımlar sonsuza gitmez), ulaşılamazsa `null`.
+- `bounds` verilmezse `geometryBounds(geometry)` kullanılır (daire: metreden yaklaşık derece).
+- `BasemapProviderRegistry.resolveSource(basemap)`: `custom:*` için sağlayıcı önce altlığın
+  `provider` alanından, yoksa tip adından (`custom:firma-a` → `firma-a`) bulunur; çözülemezse `null`.
+
 ## Askeri semboloji
 
 ```ts

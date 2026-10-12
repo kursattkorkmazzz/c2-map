@@ -173,12 +173,14 @@ Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) 
 
 ## 0.6 Registry'ler
 
-Tasarım: [design/08-extensibility-symbology.md](../design/08-extensibility-symbology.md#registryler) · Klasör: `src/registry/` · Durum: ⬜
+Tasarım: [design/08-extensibility-symbology.md](../design/08-extensibility-symbology.md#registryler) · Klasör: `src/registry/` · Durum: ✅
 
-- [ ] `FeatureKindRegistry` (`validate`, `defaultStyle`, `defaultProps`, `bounds`, `fallback`)
-- [ ] `BasemapProviderRegistry`
-- [ ] `SymbologyRegistry` arayüzü + `SymbologyProvider`, `SymbolImage` tipleri
-- [ ] Testler: kayıt, çakışan id, fallback zinciri
+- [x] Ortak `Registry<T>` (aynı anahtar → hata, `replace` ile bilinçli değiştirme, geri alma fonksiyonu)
+- [x] `FeatureKindRegistry` (`validate`, `defaultStyle`, `defaultProps`, `bounds`, `fallback`) + `withDefaults`, `resolveFor` (döngü korumalı fallback zinciri)
+- [x] `geometryBounds` (varsayılan sınır kutusu; daire metreden yaklaşık)
+- [x] `BasemapProviderRegistry` (`resolveSource` custom → standart, `transformRequest`)
+- [x] `SymbologyRegistry` + `SymbologyProvider`, `SymbolImage`, `SymbolRenderOptions` tipleri
+- [x] Testler (`registry.test.ts`): kayıt, çakışan id, fallback zinciri ve döngüsü, sınır kutuları, sağlayıcı önceliği
 
 ## 0.7 Paketleme
 
