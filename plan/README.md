@@ -22,7 +22,7 @@
 
 | Faz | Dosya | Kapsam | Durum |
 |---|---|---|---|
-| 0 | [phase-0-core.md](phases/phase-0-core.md) | `@c2/map-core`: modeller, MapStore, MapSync, EventRouter, adapter sözleşmesi, MockAdapter | 🔄 Devam ediyor (0.1 ✅) |
+| 0 | [phase-0-core.md](phases/phase-0-core.md) | `@c2/map-core`: modeller, MapStore, MapSync, EventRouter, adapter sözleşmesi, MockAdapter | ✅ (bayatlık zamanlayıcısı sonraya) |
 | 0.5 | [phase-0.5-spike.md](phases/phase-0.5-spike.md) | Perf spike (`apps/map-spike`) | ✅ (LOD spike'ı kaldı) |
 | 1 | [phase-1-2d-mvp.md](phases/phase-1-2d-mvp.md) | MapLibre + deck.gl adapter, React binding, LayerTree, demo | ⬜ |
 | 2 | [phase-2-interaction.md](phases/phase-2-interaction.md) | Seçim, hover, olaylar, overlay, çizim/düzenleme, MGRS | ⬜ |

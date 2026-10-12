@@ -1,6 +1,6 @@
 # Faz 0 — Çekirdek (`@c2/map-core`)
 
-← [Plan ana sayfası](../README.md) · Durum: 🔄 Devam ediyor
+← [Plan ana sayfası](../README.md) · Durum: ✅ Tamamlandı (yalnız bayatlık zamanlayıcısı sonraya bırakıldı)
 
 **Amaç:** Motor- ve framework-bağımsız, saf TypeScript çekirdek: modeller, store, senkronizasyon,
 olay yönlendirme ve adapter sözleşmesi. Hiçbir harita motoru import edilmez; testler Node'da koşar.
@@ -9,10 +9,12 @@ olay yönlendirme ve adapter sözleşmesi. Hiçbir harita motoru import edilmez;
 
 **Bitti sayılması için:**
 
-- [ ] Tüm alt adımlar tamamlandı
-- [ ] `pnpm test` ve `pnpm typecheck` temiz
-- [ ] `src/index.ts` genel API'yi dışa aktarıyor; iç yardımcılar dışa açılmıyor
-- [ ] `MockAdapter` ile uçtan uca senaryo testi: store'a yaz → flush → adapter doğru batch'i aldı
+- [x] Tüm alt adımlar tamamlandı (0.3'teki "sonra" maddesi hariç: bayatlık zamanlayıcısı)
+- [x] `pnpm test` ve `pnpm typecheck` temiz (273 test)
+- [x] `src/index.ts` genel API'yi dışa aktarıyor; iç yardımcılar dışa açılmıyor (`api.test.ts` korur)
+- [x] `MockAdapter` ile uçtan uca senaryo testi: store'a yaz → flush → adapter doğru batch'i aldı (`map-sync.test.ts`, `api.test.ts`)
+
+Uygulama sırası (bağımlılık nedeniyle): 0.1 → 0.2.x → 0.4 → 0.6 → 0.5 → 0.3 → 0.7.
 
 ---
 
@@ -187,5 +189,6 @@ Tasarım: [design/08-extensibility-symbology.md](../design/08-extensibility-symb
 
 ## 0.7 Paketleme
 
-- [ ] `src/index.ts` genel API listesi gözden geçirildi
-- [ ] Paket README'si: kısa kullanım örneği (store + MockAdapter)
+- [x] `src/index.ts` genel API listesi gözden geçirildi: alt klasör `index.ts`'leri açıkça listeler; günlük, `coalesce`, `diff*`/`merge*`, `Registry` temel sınıfı ve `LayerResolver` iç ayrıntı
+- [x] Genel API testi (`api.test.ts`): dışa açılan değerlerin listesi, iç ayrıntıların kapalılığı, yalnız genel API ile uçtan uca kurulum
+- [x] Paket README'si: kısa kullanım örneği (store + router + MapSync + MockAdapter)
