@@ -150,14 +150,15 @@ Tasarım: [design/04-sync-and-rendering.md](../design/04-sync-and-rendering.md#m
 
 ## 0.4 EventRouter
 
-Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md#eventrouter-global--hedefli-abonelik) · Klasör: `src/events/` · Durum: ⬜
+Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md#eventrouter-global--hedefli-abonelik) · Klasör: `src/events/` · Durum: ✅
 
-- [ ] `MAP_EVENT` sabitleri + olay tipleri (`MapEvent`, `MapEventTarget`)
-- [ ] `on(type, cb, target?)` → abonelikten çıkma fonksiyonu
-- [ ] `emit(event)` — unsur → katman zinciri (store'dan) → global; `stopPropagation`
-- [ ] Sentetik id (`cluster:…`) kabarmaz
-- [ ] `MapEventSink` arayüzü (adapter'ın gördüğü yüz)
-- [ ] Testler: dağıtım sırası, `stopPropagation`, hedefsiz/hedefli, abonelikten çıkma
+- [x] `MAP_EVENT` sabitleri + olay tipleri (`MapEventInput`, `MapEvent`, `MapEventTarget`, `MapEventListener`)
+- [x] `on(type, cb, target?)` → abonelikten çıkma fonksiyonu
+- [x] `emit(event)` — unsur → katman zinciri (store'dan, güncel) → global; `stopPropagation`
+- [x] Sentetik id (`cluster:…`, `CLUSTER_ID_PREFIX` / `isSyntheticId`) kabarmaz
+- [x] `MapEventSink` arayüzü (adapter'ın gördüğü yüz); `EventHierarchy` (store'un okunan kısmı)
+- [x] Dinleyici hatası izole (`onListenerError`)
+- [x] Testler (`event-router.test.ts`): dağıtım sırası, `stopPropagation`, hedefsiz/hedefli, yetim/silinmiş unsur, taşınan katman, abonelikten çıkma
 
 ## 0.5 Adapter sözleşmesi ve MockAdapter
 

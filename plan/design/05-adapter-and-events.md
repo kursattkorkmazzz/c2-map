@@ -194,3 +194,12 @@ events.on(MAP_EVENT.VIEW_CHANGE, cb);
 - **Olaylar ≠ veri değişiklikleri.** "Unsur 42'nin konumu değişti" bir harita olayı değil,
   **store aboneliğidir** (`store.subscribeFeature(id, cb)` / `useFeature(id)`).
 - Sentetik id (`cluster:…`) taşıyan olaylar katman zincirine kabarmaz; `CLUSTER_CLICK` olarak iletilir.
+
+Uygulama ayrıntıları (kod: `src/events/event-router.ts`):
+
+- `stopPropagation()` **sonraki hedefleri** keser; aynı hedefteki diğer dinleyiciler yine çalışır.
+- Katman zinciri her olayda store'dan **güncel** okunur (taşınan katman yeni ebeveynine kabarır).
+- Yetim unsur: kendi `layerId` dinleyicilerine ve globale gider. Store'da olmayan unsur id'si
+  (ör. hit-test ile emit arasında silinmiş): unsur dinleyicileri + global.
+- Dinleyici hatası diğerlerini ve kabarmayı durdurmaz (`onListenerError`).
+- Olaya ek veri `data` alanıyla taşınır (küme içeriği, çizim geometrisi); `view` alanı `VIEW_CHANGE` içindir.
