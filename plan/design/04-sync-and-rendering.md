@@ -56,6 +56,29 @@ Birleştirme kuralları store'un günlüğündedir ([03](03-store.md#işlemler-v
 7. **META filtresi:** yalnız `META` biti değişen unsur batch'e girmez.
 8. **Sunum aşamaları:** üretilen batch'i sırayla aşamalardan geçirip adapter'a verir.
 
+### Uygulama ayrıntıları (kod: `src/sync/`)
+
+- **Ekranda ne var:** MapSync, adapter'ın gösterdiği her unsurun efektif değerlerini (`groupId`,
+  `opacity`, `zIndex`) `rendered` haritasında tutar. Değerlendirme sonucu buna göre:
+  görünmez oldu → REMOVE; yeni görünür oldu → `RENDER_CHANGE_ALL`; görünürken değişti → kendi
+  `VISUAL` bitleri | değişen efektif değer bitleri (`OPACITY` / `Z_INDEX` / `GROUP`); hiçbiri → gönderilmez.
+- **Ne zaman ne değerlendirilir:**
+  - yalnız unsur değişikliği → yalnız o unsurlar;
+  - render'ı etkileyen katman değişikliği (`VISIBLE` / `OPACITY` / `ZOOM` / `RENDER_GROUP` / `PARENT`) →
+    katman önbelleği temizlenir, **yalnız o katmanın alt ağacındaki** unsurlar;
+  - `structure` (katman ekle/sil/taşı), zoom eşiği geçişi, ilk senkron, `setStages` → **tümü**
+    (nadir olaylar).
+- **`LayerResolver`:** katman başına önbellekli efektif bilgi; kökten ulaşılamayan katman (yetim zincir)
+  çözülemez → altındaki unsurlar görünmez. Zoom kuralı MapLibre ile aynı: `minZoom` dahil, `maxZoom` hariç;
+  zoom bilinmiyorsa (henüz `setView` yok) sınır uygulanmaz.
+- **`setView(view)`:** yalnız bir katmanın eşiği **geçildiyse** tam değerlendirme planlar; sunum
+  aşamalarının `onViewChange` batch'i zamanlayıcıyı beklemeden hemen uygulanır.
+- **`setStages(stages)`:** görünen her unsur tüm bitlerle yeniden gönderilir (`rendered` temizlenmez;
+  temizlenseydi artık görünmeyenler için REMOVE üretilemezdi).
+- **Zamanlayıcı:** `createFrameScheduler({ maxApplyHz })` son çalışmadan beri `1000 / maxApplyHz` ms bekler,
+  sonra rAF'a hizalar (rAF yoksa yalnız zamanlayıcı). Test ve sunucu için `createManualScheduler()`.
+- Bayatlık (`stale`) zamanlayıcısı henüz yok (Faz 0'da "sonra" olarak bırakıldı).
+
 ## MapLibre render group
 
 > Statik ve seyrek değişen kind'ler (kontrol tedbirleri, poligonlar, çizimler; en fazla ~10k

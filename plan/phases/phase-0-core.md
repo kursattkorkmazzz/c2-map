@@ -129,24 +129,25 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ## 0.3 MapSync ve sunum aşaması
 
-Tasarım: [design/04-sync-and-rendering.md](../design/04-sync-and-rendering.md#mapsyncin-görevleri) · Klasör: `src/sync/` · Durum: ⬜
+Tasarım: [design/04-sync-and-rendering.md](../design/04-sync-and-rendering.md#mapsyncin-görevleri) · Klasör: `src/sync/` · Durum: ✅ (bayatlık sonraya bırakıldı)
 
 > Önkoşul: 0.5'teki `RenderBatch` / `RenderFeature` tipleri (önce tipleri yazın).
 
-- [ ] Zamanlayıcı arayüzü (`schedule(cb)`) — varsayılan rAF + `maxApplyHz`; testte elle tetiklenen
-- [ ] `subscribeChanges` → flush planla; flush başına tek `drainChanges`
-- [ ] Efektif görünürlük (katman zinciri + `hidden` + zoom aralığı), katman başına önbellek + alt ağaç geçersizleştirme
-- [ ] Efektif opaklık (ataların çarpımı)
-- [ ] Render group çözümü (en yakın `renderGroup` ata, yoksa kökün çocuğu)
-- [ ] zIndex (derinlik-öncelikli katman sırası + `feature.z`)
-- [ ] Katman aç/kapa → alt ağaçtaki unsurlar için ADD/REMOVE
-- [ ] Yetim unsur görünmez; katmanı gelince görünür olur
-- [ ] META-only değişiklik batch'e girmez
-- [ ] Seçim/hover → `FeatureStatePatch`
-- [ ] Zoom eşiği geçişi (`setView` / `viewchange` girdisi) → ilgili katmanları yeniden değerlendir
-- [ ] `PresentationStage` arayüzü + aşama zinciri (varsayılan boş; batch aynen geçer)
+- [x] Zamanlayıcı arayüzü (`Scheduler.schedule(task)` → iptal) — `createFrameScheduler` (rAF + `maxApplyHz`, rAF yoksa zamanlayıcı); `createManualScheduler` (test)
+- [x] `subscribeChanges` → flush planla (kare başına bir kez); flush başına tek `drainChanges`; `flush()` ile hemen uygulama
+- [x] Efektif görünürlük (katman zinciri + `hidden` + zoom aralığı) — `LayerResolver`, katman başına önbellek; katman değişince geçersizleştirme + yalnız değişen alt ağacın unsurları yeniden değerlendirilir
+- [x] Efektif opaklık (ataların çarpımı)
+- [x] Render group çözümü (en yakın `renderGroup` ata, yoksa kökün çocuğu) + grup diff'i
+- [x] zIndex (derinlik-öncelikli katman sırası × `Z_LAYER_STRIDE` + `feature.z`)
+- [x] Katman aç/kapa → alt ağaçtaki unsurlar için ADD/REMOVE
+- [x] Yetim unsur görünmez; katmanı gelince görünür olur
+- [x] META-only değişiklik batch'e girmez; render'ı etkilemeyen katman değişikliği (ad, meta) de girmez
+- [x] Seçim/hover → `FeatureStatePatch`; yeniden görünen seçili/hover'daki unsurun durumu tekrar gönderilir
+- [x] Zoom eşiği geçişi (`setView`) → yalnız eşik geçilince yeniden değerlendirme (min dahil, max hariç)
+- [x] `PresentationStage` arayüzü + aşama zinciri (varsayılan boş; batch aynen geçer); `setStages`, `onViewChange`
+- [x] Altlık değişiklikleri batch'e (upsert / remove)
 - [ ] (Sonra) bayatlık zamanlayıcısı → `stale` yamaları
-- [ ] Testler (`MockAdapter` ile): her madde için senaryo
+- [x] Testler (`map-sync.test.ts` — uçtan uca store → MapSync → MockAdapter; `scheduler.test.ts`)
 
 ## 0.4 EventRouter
 
@@ -162,7 +163,7 @@ Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md#e
 
 ## 0.5 Adapter sözleşmesi ve MockAdapter
 
-Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) · Klasör: `src/adapter/` · Durum: 🔄 (uçtan uca test 0.3'te)
+Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) · Klasör: `src/adapter/` · Durum: ✅
 
 - [x] `MapCapabilities`, `MapAdapter`, `MountOptions` tipleri
 - [x] `RenderBatch`, `Diff`, `RenderFeature`, `RenderGroup`, `FeatureStatePatch`, `FeatureVisualState` + `isEmptyBatch`
@@ -171,7 +172,7 @@ Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) 
 - [x] `DrawSession` / `EditSession` / `DrawOptions` için yer tutucu tipler (Faz 2'de doldurulur)
 - [x] `MockAdapter`: batch'leri kaydeder, "ekranda ne var" durumunu tutar, kamera, `emit` ile sahte olay, `takeBatches`
 - [x] Testler (`mock-adapter.test.ts`)
-- [ ] Uçtan uca test: store → MapSync → MockAdapter (MapSync'e bağlı; 0.3 ile birlikte yazılacak)
+- [x] Uçtan uca test: store → MapSync → MockAdapter (0.3 ile birlikte, `map-sync.test.ts`)
 
 ## 0.6 Registry'ler
 
