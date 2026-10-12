@@ -52,10 +52,12 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.3 Maske hesabı — `store/diff.ts`
 
-- [ ] `diffFeature(prev, next): number` — alan alan `Object.is`
-- [ ] `diffLayer`, `diffBasemap`
-- [ ] `mergeFeaturePatch(prev, patch)` — `style` / `props` / `meta` sığ birleştirme, diğerleri doğrudan
-- [ ] Test: her alan doğru biti üretiyor; aynı nesne → 0; patch birleştirme
+- [x] `diffFeature(prev, next): number` — alan alan `Object.is` (`kind` değişirse tüm bitler, `rev` hariç)
+- [x] `diffLayer`, `diffBasemap`
+- [x] `mergeFeaturePatch(prev, patch)` — `style` / `props` / `meta` sığ birleştirme, diğerleri doğrudan
+- [x] `mergeLayerPatch` (`meta` sığ), `mergeBasemapPatch` (`source` değiştirilir), `FeaturePatch` / `LayerPatch` / `BasemapPatch` tipleri
+- [x] `shallowMerge`: içerik aynıysa eski referansı korur (gereksiz bit üretmez)
+- [x] Test (`diff.test.ts`): her alan doğru biti üretiyor; aynı nesne → 0; patch birleştirme; `undefined` ile temizleme
 
 ### 0.2.4 Store iskeleti ve okuma — `store/map-store.ts`
 

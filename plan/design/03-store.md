@@ -79,6 +79,17 @@ store.transaction((tx) => {
 });
 ```
 
+### Patch kuralları (kod: `store/diff.ts`)
+
+- Patch'te bir anahtar **varsa** (değeri `undefined` olsa bile) uygulanır: `{ id, hidden: undefined }`
+  alanı temizler. Anahtar **yoksa** alana dokunulmaz.
+- `style`, `props`, `meta` sığ birleştirilir; birleşimin içeriği eskisiyle aynıysa **eski referans
+  korunur** → backend aynı rengi tekrar gönderdiğinde gereksiz `STYLE` biti üretilmez.
+- `geometry` ve altlığın `source`'u birleştirilmez, değiştirilir (ayrışık birleşimlerde alan
+  karıştırmak geçersiz nesne üretir).
+- `id` patch ile değiştirilemez. `kind` değişirse maske tüm bitlerdir (çizici değişir).
+  `rev` maskeye katkı yapmaz.
+
 ### Unsurlar
 
 - **upsert:** Id yoksa **ekle** (ADD). Varsa alanları eskisiyle karşılaştır, maskeyi hesapla,
