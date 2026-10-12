@@ -61,21 +61,22 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.4 Store iskeleti ve okuma — `store/map-store.ts`
 
-- [ ] `createMapStore({ now? })`
-- [ ] İç yapılar: `features`, `layers`, `basemaps`, `childLayerIds`, `featureIdsByLayer`, `selection`, `hovered`, `updatedAt`
-- [ ] Okuma API'si: `getFeature`, `getLayer`, `getBasemap`, `getChildLayerIds`, `getFeatureIds`, `getBasemaps`, `getSelection`, `getHovered`, `getUpdatedAt`, `stats`
+- [x] `createMapStore({ now? })`
+- [x] İç yapılar: `features`, `layers`, `basemaps`, `childLayerIds`, `featureIdsByLayer`, `selection`, `hovered`, `updatedAt` (+ `revs`)
+- [x] Okuma API'si: `getFeature`, `getLayer`, `getBasemap`, `getChildLayerIds`, `getFeatureIds`, `getBasemaps`, `getSelection`, `getHovered`, `getUpdatedAt`, `stats`
+  - `getBasemaps` şimdilik sırasız; sıralama + önbellek 0.2.7'de
 
 ### 0.2.5 Transaction ve unsur işlemleri
 
-- [ ] `transaction(fn)` — iç içe çağrı dıştakine katılır
-- [ ] `upsertFeatures` — ADD / UPDATE (değişiklik yoksa hiçbir şey)
-- [ ] `patchFeatures` — olmayan id yok sayılır + `stats.ignoredPatches`
-- [ ] `removeFeatures` — indeks, seçim ve hover'dan da düşer
-- [ ] `layerId` değişimi — iki katmanın indeksi güncellenir, `LAYER` biti
-- [ ] Yetim unsur kabul edilir ve indekslenir
-- [ ] `rev` kuralı — eski/eşit `rev` düşürülür + `stats.droppedStale`
-- [ ] `updatedAt` her yazmada `now()` ile güncellenir
-- [ ] Testler: değişmezlik (yeni referans, eski nesne değişmemiş), `rev` senaryoları, patch birleştirme
+- [x] `transaction(fn)` — iç içe çağrı dıştakine katılır; `tx` dışarıda kullanılırsa hata; `fn` hata fırlatırsa geri alma yok
+- [x] `upsertFeatures` — ADD / UPDATE (değişiklik yoksa hiçbir şey, eski referans kalır)
+- [x] `patchFeatures` — olmayan id yok sayılır + `stats.ignoredPatches`
+- [x] `removeFeatures` — indeks, seçim ve hover'dan da düşer (seçim/hover testi 0.2.9'da, seçim API'si gelince)
+- [x] `layerId` değişimi — iki katmanın indeksi güncellenir, `LAYER` biti
+- [x] Yetim unsur kabul edilir ve indekslenir
+- [x] `rev` kuralı — eski/eşit `rev` düşürülür + `stats.droppedStale`; `rev` nesneden ayrı tutulur
+- [x] `updatedAt` her yazmada `now()` ile güncellenir (içerik aynı olsa bile; düşürülen yazmada değil)
+- [x] Testler (`map-store.test.ts`): değişmezlik, `rev` senaryoları, patch birleştirme, iç içe/hatalı transaction
 
 ### 0.2.6 Katman işlemleri
 
@@ -118,8 +119,8 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.11 `drainChanges`
 
-- [ ] Birden fazla transaction boyunca biriken günlüğü döner ve sıfırlar
-- [ ] Test: iki transaction + tek drain → birleşmiş sonuç
+- [x] Birden fazla transaction boyunca biriken günlüğü döner ve sıfırlar (0.2.5 ile birlikte yazıldı)
+- [x] Test: iki transaction + tek drain → birleşmiş sonuç
 
 ## 0.3 MapSync ve sunum aşaması
 

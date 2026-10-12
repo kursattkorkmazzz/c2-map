@@ -79,6 +79,21 @@ store.transaction((tx) => {
 });
 ```
 
+### Transaction kuralları (kod: `store/map-store.ts`)
+
+- `tx` nesnesi yalnız transaction içinde geçerlidir; dışarı kaçırılıp kullanılırsa hata fırlatır.
+- `fn` hata fırlatırsa **geri alma yoktur**: o ana kadarki yazmalar kalır, günlüğe yazılmıştır;
+  transaction sayacı yine de sıfırlanır (store kullanılabilir kalır).
+- Store verilen nesneyi **kopyalamaz**; `getFeature(id)` upsert edilen nesnenin kendisini döner.
+- `getFeatureIds(layerId)` kümeyi kopyalamadan döner (50k unsurlu katmanda her eklemede kopya
+  O(n²) olurdu). Referans sabit değildir; saklanmaz, değişim abonelikle dinlenip yeniden okunur.
+- **`rev` nesneden ayrı tutulur** (`revs` haritası). İçeriği aynı ama `rev`'i yeni bir mesaj
+  geldiğinde nesne referansı değişmez (bildirim yok), ama `rev` ilerler; böylece ardından gelen
+  eski mesaj yine düşürülür. Bu durumda `getFeature(id).rev` son *görünür* yazmanın `rev`'idir.
+- Silinen unsurun `rev`'i unutulur; aynı id yeniden eklenirse `rev` sıfırdan başlar.
+- `updatedAt` içerik aynı olsa bile her kabul edilen yazmada güncellenir (mesaj = "unsur hâlâ
+  canlı"); `rev` nedeniyle düşürülen yazmada güncellenmez.
+
 ### Patch kuralları (kod: `store/diff.ts`)
 
 - Patch'te bir anahtar **varsa** (değeri `undefined` olsa bile) uygulanır: `{ id, hidden: undefined }`
