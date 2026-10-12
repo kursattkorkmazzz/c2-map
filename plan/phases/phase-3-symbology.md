@@ -1,0 +1,38 @@
+# Faz 3 — Semboloji, etiket, LOD
+
+← [Plan ana sayfası](../README.md) · Durum: ⬜ · Önkoşul: Faz 1 (Faz 2 ile paralel olabilir)
+
+**Amaç:** APP-6 birlikler canlı ve her zoom'da okunur.
+
+## Açık kararlar (başlamadan)
+- [ ] #17 LOD eşikleri (Faz 0.5 LOD spike'ı ile)
+- [ ] #18 Etiketler: hangi zoom, hangi motor
+
+## 3.1 `@c2/map-symbology`
+Tasarım: [08](../design/08-extensibility-symbology.md#askeri-semboloji)
+- [ ] `SymbologyProvider` arayüzü, `SymbologyRegistry` implementasyonu
+- [ ] Ortak önbellek + çapa ortalama + rasterize yardımcıları
+
+## 3.2 `@c2/map-symbology-app6`
+- [ ] `milsymbol` tabanlı APP-6(D) sağlayıcısı
+- [ ] `cacheKey`: yalnız paylaşılan değiştiriciler
+
+## 3.3 `milsym` renderer'ları
+Tasarım: [04](../design/04-sync-and-rendering.md#askeri-semboller-ve-ikonlar)
+- [ ] MapLibre: `setMissingStyleImageResolver` ile lazy üretim
+- [ ] deck.gl: otomatik atlas + birlik başına boyut dizisi
+- [ ] Image atlas ref-count + LRU
+
+## 3.4 Etiket katmanı
+- [ ] Karar #18'e göre (MapLibre symbol / deck.gl `TextLayer`)
+- [ ] Zoom eşiği
+
+## 3.5 LOD
+Tasarım: [04](../design/04-sync-and-rendering.md#zooma-göre-gösterim-lod)
+- [ ] Uzak zoom: nokta (`ScatterplotLayer`), yakın zoom: sembol
+- [ ] Eşikler kind/katman bazında; geçişte veri yeniden gönderilmez
+
+## 3.6 Ingest Worker
+Tasarım: [03](../design/03-store.md#canlı-veri-girişi-ingest)
+- [ ] WS + JSON parse + normalize + birleştirme Worker'da
+- [ ] Ana thread'e kare başına tek paket
