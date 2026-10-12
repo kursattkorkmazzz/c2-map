@@ -38,9 +38,10 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.1 Değişiklik maskeleri ve tipler — `store/change.ts`
 
-- [ ] `FEATURE_CHANGE` bitleri (+ `VISUAL`, `ALL`), `LAYER_CHANGE`, `BASEMAP_CHANGE`
-- [ ] `CHANGE_OP` (`ADD` / `UPDATE` / `REMOVE`) + `ChangeOp`
-- [ ] `EntityChange`, `ChangeSet` tipleri
+- [x] `FEATURE_CHANGE`, `LAYER_CHANGE`, `BASEMAP_CHANGE` bitleri + türetilmiş `*_ALL` ve `FEATURE_CHANGE_VISUAL`
+- [x] `CHANGE_OP` (`ADD` / `UPDATE` / `REMOVE`) + `ChangeOp`
+- [x] `EntityChange`, `ChangeSet` tipleri
+- [x] Test (`change.test.ts`): her değer tek bit, bitler çakışmıyor, `ALL` / `VISUAL` doğru
 
 ### 0.2.2 Değişiklik günlüğü — `store/change-journal.ts`
 

@@ -152,8 +152,13 @@ Her varlık türü için bit maskesi (const nesne, `enum` değil):
 | `INTERACTION` (selectable) | `PARENT` (taşındı / sıra)              |                                      |
 | `META`                     | `META`                                 |                                      |
 
-`FEATURE_CHANGE.VISUAL` = `META` hariç hepsi. MapSync yalnız `VISUAL` bitlerine bakar;
-**yalnız `META` değiştiyse unsur haritaya hiç gitmez**.
+Bit tablolarının yanında türetilmiş sabitler (tabloları saf tutmak için ayrı tanımlanır):
+
+- `FEATURE_CHANGE_ALL`, `LAYER_CHANGE_ALL`, `BASEMAP_CHANGE_ALL` — tüm bitler (REMOVE → ADD birleşmesinde).
+- `FEATURE_CHANGE_VISUAL` = `META` hariç hepsi. MapSync yalnız bu bitlere bakar;
+  **yalnız `META` değiştiyse unsur haritaya hiç gitmez**.
+
+Altlıkta `META` yok, çünkü `Basemap` tipinde `meta` alanı yok.
 
 ### İşlemler ve birleştirme
 
