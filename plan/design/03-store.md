@@ -175,6 +175,18 @@ Bir flush'a kadar aynı id için gelen işlemler şu tabloya göre birleşir:
 | REMOVE → ADD    | UPDATE (**tüm bitler**) | Harita eskisini biliyor; yeni nesne tamamen farklı olabilir |
 | REMOVE → REMOVE | REMOVE                  | (olmamalı, ama zararsız)                                    |
 
+Ek kurallar (kod: `store/change-journal.ts`):
+
+- **Normalleştirme:** ADD kaydı her zaman türün tüm bitlerini taşır (yeni varlığın her alanı
+  "yeni"); REMOVE kaydı hiç bit taşımaz. Maskesi 0 olan UPDATE kayıt oluşturmaz.
+- Tabloda "olmamalı" denen geçişler (UPDATE → ADD, REMOVE → UPDATE) hata fırlatmaz; varlık
+  mevcut sayılır ve tüm bitlerle UPDATE yazılır (harita tarafı için en güvenli sonuç).
+- **Seçim:** store, bir unsurun seçim durumu **gerçekten tersine döndüğünde** `flipSelection(id)`
+  çağırır. Aynı flush içinde iki kez dönen unsurun net değişikliği yoktur, listeden çıkar.
+- **Hover:** ilk `prev` korunur, son `next` alınır; başa dönerse (`prev === next`) kayıt silinir.
+- `drain()` dönen yapıları çağırana bırakır ve kendisi yeni boş yapılarla devam eder;
+  sonraki yazmalar önceki `ChangeSet`'i etkilemez.
+
 ### ChangeSet
 
 ```ts

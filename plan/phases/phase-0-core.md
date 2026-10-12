@@ -45,10 +45,10 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.2 Değişiklik günlüğü — `store/change-journal.ts`
 
-- [ ] `record(kind, id, op, mask)` — [birleştirme tablosu](../design/03-store.md#işlemler-ve-birleştirme)
-- [ ] `structure`, `selection` (değişen id'ler), `hover` kayıtları
-- [ ] `drain(): ChangeSet` — al ve sıfırla
-- [ ] Test: tablonun **her satırı** için ayrı test (ADD→UPDATE, ADD→REMOVE, UPDATE→UPDATE maske OR, UPDATE→REMOVE, REMOVE→ADD tüm bitler)
+- [x] `record(kind, id, op, mask)` — [birleştirme tablosu](../design/03-store.md#işlemler-ve-birleştirme) (saf `coalesce()` fonksiyonu + `ChangeJournal`)
+- [x] `markStructure`, `flipSelection` (net değişiklik), `recordHover` (ilk prev / son next)
+- [x] `drain(): ChangeSet` — al ve sıfırla; `isEmpty`
+- [x] Test (`change-journal.test.ts`): tablonun her satırı + zincirler, türlerin ayrılığı, seçim/hover, drain
 
 ### 0.2.3 Maske hesabı — `store/diff.ts`
 
