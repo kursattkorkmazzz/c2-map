@@ -114,12 +114,13 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.10 Abonelik
 
-- [ ] `subscribeFeature`, `subscribeLayer`, `subscribeBasemap`, `subscribeLayerContents`
-- [ ] `subscribeStructure`, `subscribeSelection`, `subscribeHover`, `subscribeChanges`
-- [ ] Bildirimler transaction sonunda; id başına bir kez
-- [ ] Dinleyici hatası diğerlerini durdurmaz
-- [ ] Dinleyici içinden yeni transaction → ayrı dalga
-- [ ] Testler: çağrı sayıları (100 değişiklik → 1 çağrı), abonelikten çıkma, hata izolasyonu
+- [x] `subscribeFeature`, `subscribeLayer`, `subscribeBasemap`, `subscribeLayerContents`
+- [x] `subscribeStructure`, `subscribeSelection`, `subscribeHover`, `subscribeChanges`
+- [x] (Ek) `subscribeBasemaps` — altlık listesi değişti (`getBasemaps()` için)
+- [x] Bildirimler transaction sonunda; id başına bir kez
+- [x] Dinleyici hatası diğerlerini durdurmaz (`onListenerError` seçeneği; varsayılan asenkron rapor)
+- [x] Dinleyici içinden yeni transaction → ayrı dalga
+- [x] Testler (`map-store.subscriptions.test.ts`): çağrı sayıları (100 değişiklik → 1 çağrı), abonelikten çıkma, hata izolasyonu, bildirim sırası
 
 ### 0.2.11 `drainChanges`
 

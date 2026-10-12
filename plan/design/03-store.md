@@ -292,6 +292,16 @@ Kurallar:
 - Bir dinleyicinin hatası diğerlerini durdurmaz (yakalanır, sonra raporlanır).
 - Dinleyici içinde yeni transaction açılabilir (ör. türetilmiş durum); bu ayrı bir dalga olarak işlenir.
 
+Uygulama ayrıntıları:
+
+- Ek abonelik: `subscribeBasemaps(cb)` — altlık listesi değişti (`getBasemaps()` yeni referans;
+  LayerTree'nin "Altlıklar" bölümü için).
+- Dinleyici hatası `onListenerError(error)` seçeneğine gider; verilmezse transaction'ı bozmadan
+  asenkron raporlanır (`reportError` varsa o, yoksa mikro görevde yeniden fırlatma).
+- `fn` hata fırlatsa bile o ana kadarki yazmalar bildirilir (geri alma yok; aboneler store ile tutarlı kalır).
+- Bildirim sırası: unsur → katman → altlık → katman içeriği → yapı → altlık listesi → seçim → hover → genel değişiklik.
+- Yalnız `updatedAt` / `rev` ilerleten (içeriği aynı) yazmalar bildirim üretmez.
+
 ## Okuma API'si (taslak)
 
 ```ts

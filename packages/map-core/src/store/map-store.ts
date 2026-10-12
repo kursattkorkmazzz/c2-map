@@ -5,14 +5,13 @@
 // Tüm yazmalar `transaction(tx => …)` içinden yapılır; her yazma değişiklik günlüğüne
 // (ChangeJournal) düşer ve MapSync bunu `drainChanges()` ile alır.
 //
-// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur), 0.2.6 (katman),
-// 0.2.7 (altlık), 0.2.8 (snapshot) ve 0.2.9 (seçim/hover) hazır. Abonelik (0.2.10)
-// sonraki adımda bu dosyaya eklenecek.
+// Aboneler (React hook'ları, LayerTree) id bazlı dinler; bildirimler en dıştaki transaction
+// bitince, her hedef için bir kez gider (`commit()`).
 
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
 import type { Layer } from "../model/layer";
-import { BASEMAP_CHANGE, CHANGE_OP, LAYER_CHANGE, type ChangeSet } from "./change";
+import { BASEMAP_CHANGE, CHANGE_OP, LAYER_CHANGE, type ChangeOp, type ChangeSet } from "./change";
 import { ChangeJournal, ENTITY_KIND } from "./change-journal";
 import {
   diffBasemap,
@@ -31,7 +30,15 @@ import {
 export type MapStoreOptions = {
   /** Saat kaynağı (ms). Testte enjekte edilir. Varsayılan: `performance.now` / `Date.now`. */
   now?: () => number;
+  /**
+   * Bir dinleyici hata fırlatırsa çağrılır (diğer dinleyiciler çalışmaya devam eder).
+   * Varsayılan: hata transaction'ı bozmadan asenkron olarak raporlanır (`reportError` / mikro görev).
+   */
+  onListenerError?: (error: unknown) => void;
 };
+
+/** Abonelikten çıkma fonksiyonu. */
+export type Unsubscribe = () => void;
 
 export type MapStoreStats = {
   /** `rev`'i eski veya eşit olduğu için düşürülen yazmalar. */
@@ -114,7 +121,7 @@ export interface MapStore {
   /**
    * Katmanın doğrudan unsurları. Kopyalanmadan döner (50k unsurlu katmana her eklemede kopya
    * O(n²) olurdu): içerik yerinde değişir, referans sabit **değildir** (katman boşalınca küme
-   * silinir). Referansı saklamayın; değişimi `subscribeLayerContents` (0.2.10) ile dinleyip
+   * silinir). Referansı saklamayın; değişimi `subscribeLayerContents` ile dinleyip
    * yeniden okuyun.
    */
   getFeatureIds(layerId: string): ReadonlySet<string>;
@@ -130,6 +137,24 @@ export interface MapStore {
   // yazma
   /** İç içe çağrı dıştakine katılır. `fn` hata fırlatırsa o ana kadarki yazmalar kalır (geri alma yok). */
   transaction(fn: (tx: MapTx) => void): void;
+
+  // abonelik — bildirimler en dıştaki transaction bitince, her hedef için bir kez gider
+  /** Bu unsur eklendi / değişti / silindi. */
+  subscribeFeature(id: string, cb: () => void): Unsubscribe;
+  /** Bu katman eklendi / değişti / taşındı / silindi. */
+  subscribeLayer(id: string, cb: () => void): Unsubscribe;
+  /** Bu altlık eklendi / değişti / silindi. */
+  subscribeBasemap(id: string, cb: () => void): Unsubscribe;
+  /** Katmanın doğrudan unsur kümesi değişti (eklendi / çıktı). Sayaç, ağaçta unsur listesi için. */
+  subscribeLayerContents(layerId: string, cb: () => void): Unsubscribe;
+  /** Katman ağacının şekli değişti (ekle / sil / taşı). */
+  subscribeStructure(cb: () => void): Unsubscribe;
+  /** Altlık listesi değişti (`getBasemaps()` yeni referans). */
+  subscribeBasemaps(cb: () => void): Unsubscribe;
+  subscribeSelection(cb: () => void): Unsubscribe;
+  subscribeHover(cb: () => void): Unsubscribe;
+  /** Günlüğe herhangi bir şey yazıldı (MapSync flush planlamak için). */
+  subscribeChanges(cb: () => void): Unsubscribe;
 
   // MapSync için
   /** Son çağrıdan beri biriken değişiklikleri döner ve günlüğü sıfırlar. */
@@ -148,6 +173,71 @@ const EMPTY_BASEMAPS: readonly Basemap[] = Object.freeze([]);
 
 const defaultNow = (): number =>
   typeof performance !== "undefined" ? performance.now() : Date.now();
+
+/** Dinleyici hatasını transaction'ı bozmadan raporla (tarayıcıda konsola düşer). */
+const defaultReportError = (error: unknown): void => {
+  if (typeof globalThis.reportError === "function") globalThis.reportError(error);
+  else
+    queueMicrotask(() => {
+      throw error;
+    });
+};
+
+type Listener = () => void;
+
+/** Bir transaction boyunca kimin bildirim alacağının listesi. */
+type PendingNotifications = {
+  any: boolean;
+  features: Set<string>;
+  layers: Set<string>;
+  basemaps: Set<string>;
+  layerContents: Set<string>;
+  structure: boolean;
+  basemapList: boolean;
+  selection: boolean;
+  hover: boolean;
+};
+
+const emptyPending = (): PendingNotifications => ({
+  any: false,
+  features: new Set(),
+  layers: new Set(),
+  basemaps: new Set(),
+  layerContents: new Set(),
+  structure: false,
+  basemapList: false,
+  selection: false,
+  hover: false,
+});
+
+/** Anahtar başına dinleyici kümesi. */
+class KeyedListeners {
+  private readonly map = new Map<string, Set<Listener>>();
+
+  add(key: string, cb: Listener): Unsubscribe {
+    let set = this.map.get(key);
+    if (!set) {
+      set = new Set();
+      this.map.set(key, set);
+    }
+    set.add(cb);
+    return () => {
+      const current = this.map.get(key);
+      if (!current) return;
+      current.delete(cb);
+      if (current.size === 0) this.map.delete(key);
+    };
+  }
+
+  get(key: string): ReadonlySet<Listener> | undefined {
+    return this.map.get(key);
+  }
+}
+
+const addListener = (set: Set<Listener>, cb: Listener): Unsubscribe => {
+  set.add(cb);
+  return () => set.delete(cb);
+};
 
 class MapStoreImpl implements MapStore {
   // Varlıklar (değişmez nesneler; değişince Map'teki kayıt yeni nesneyle değiştirilir)
@@ -181,8 +271,22 @@ class MapStoreImpl implements MapStore {
   private depth = 0;
   private readonly tx: MapTx;
 
+  // Abonelik
+  private pending = emptyPending();
+  private readonly featureListeners = new KeyedListeners();
+  private readonly layerListeners = new KeyedListeners();
+  private readonly basemapListeners = new KeyedListeners();
+  private readonly layerContentsListeners = new KeyedListeners();
+  private readonly structureListeners = new Set<Listener>();
+  private readonly basemapListListeners = new Set<Listener>();
+  private readonly selectionListeners = new Set<Listener>();
+  private readonly hoverListeners = new Set<Listener>();
+  private readonly changeListeners = new Set<Listener>();
+  private readonly reportListenerError: (error: unknown) => void;
+
   constructor(options: MapStoreOptions) {
     this.now = options.now ?? defaultNow;
+    this.reportListenerError = options.onListenerError ?? defaultReportError;
     this.tx = {
       upsertFeatures: (features) => this.guard(() => this.upsertFeatures(features)),
       patchFeatures: (patches) => this.guard(() => this.patchFeatures(patches)),
@@ -268,8 +372,115 @@ class MapStoreImpl implements MapStore {
     return this.journal.drain();
   }
 
-  /** En dıştaki transaction bitti. 0.2.10'da abonelere bildirim burada gönderilecek. */
-  private commit(): void {}
+  /**
+   * En dıştaki transaction bitti: bekleyen bildirimleri gönder. Liste önce sıfırlanır; böylece
+   * bir dinleyicinin açtığı yeni transaction ayrı bir dalga olarak işlenir.
+   */
+  private commit(): void {
+    const p = this.pending;
+    if (!p.any) return;
+    this.pending = emptyPending();
+
+    for (const id of p.features) this.notify(this.featureListeners.get(id));
+    for (const id of p.layers) this.notify(this.layerListeners.get(id));
+    for (const id of p.basemaps) this.notify(this.basemapListeners.get(id));
+    for (const id of p.layerContents) this.notify(this.layerContentsListeners.get(id));
+    if (p.structure) this.notify(this.structureListeners);
+    if (p.basemapList) this.notify(this.basemapListListeners);
+    if (p.selection) this.notify(this.selectionListeners);
+    if (p.hover) this.notify(this.hoverListeners);
+    this.notify(this.changeListeners);
+  }
+
+  private notify(listeners: ReadonlySet<Listener> | undefined): void {
+    if (!listeners || listeners.size === 0) return;
+    // Kopya üzerinde gez: dinleyici içinde abone olma/çıkma gezinmeyi etkilemesin.
+    for (const cb of [...listeners]) {
+      try {
+        cb();
+      } catch (error) {
+        this.reportListenerError(error);
+      }
+    }
+  }
+
+  // ── Abonelik ───────────────────────────────────────────────────
+
+  subscribeFeature(id: string, cb: Listener): Unsubscribe {
+    return this.featureListeners.add(id, cb);
+  }
+
+  subscribeLayer(id: string, cb: Listener): Unsubscribe {
+    return this.layerListeners.add(id, cb);
+  }
+
+  subscribeBasemap(id: string, cb: Listener): Unsubscribe {
+    return this.basemapListeners.add(id, cb);
+  }
+
+  subscribeLayerContents(layerId: string, cb: Listener): Unsubscribe {
+    return this.layerContentsListeners.add(layerId, cb);
+  }
+
+  subscribeStructure(cb: Listener): Unsubscribe {
+    return addListener(this.structureListeners, cb);
+  }
+
+  subscribeBasemaps(cb: Listener): Unsubscribe {
+    return addListener(this.basemapListListeners, cb);
+  }
+
+  subscribeSelection(cb: Listener): Unsubscribe {
+    return addListener(this.selectionListeners, cb);
+  }
+
+  subscribeHover(cb: Listener): Unsubscribe {
+    return addListener(this.hoverListeners, cb);
+  }
+
+  subscribeChanges(cb: Listener): Unsubscribe {
+    return addListener(this.changeListeners, cb);
+  }
+
+  // ── Günlük + bildirim yardımcıları ─────────────────────────────
+  // Her yazma hem günlüğe (MapSync için) hem bekleyen bildirim listesine (aboneler için) düşer.
+
+  private recordFeature(id: string, op: ChangeOp, mask?: number): void {
+    this.journal.record(ENTITY_KIND.FEATURE, id, op, mask);
+    this.pending.features.add(id);
+    this.pending.any = true;
+  }
+
+  private recordLayer(id: string, op: ChangeOp, mask?: number): void {
+    this.journal.record(ENTITY_KIND.LAYER, id, op, mask);
+    this.pending.layers.add(id);
+    this.pending.any = true;
+  }
+
+  private recordBasemap(id: string, op: ChangeOp, mask?: number): void {
+    this.journal.record(ENTITY_KIND.BASEMAP, id, op, mask);
+    this.pending.basemaps.add(id);
+    this.pending.basemapList = true;
+    this.pending.any = true;
+  }
+
+  private markStructure(): void {
+    this.journal.markStructure();
+    this.pending.structure = true;
+    this.pending.any = true;
+  }
+
+  private flipSelection(id: string): void {
+    this.journal.flipSelection(id);
+    this.pending.selection = true;
+    this.pending.any = true;
+  }
+
+  private recordHover(prev: string | null, next: string | null): void {
+    this.journal.recordHover(prev, next);
+    this.pending.hover = true;
+    this.pending.any = true;
+  }
 
   /** `tx` referansı transaction dışına kaçırılıp kullanılırsa hata. */
   private guard(fn: () => void): void {
@@ -322,10 +533,10 @@ class MapStoreImpl implements MapStore {
       }
       if (this.hovered === id) {
         this.hovered = null;
-        this.journal.recordHover(id, null);
+        this.recordHover(id, null);
       }
 
-      this.journal.record(ENTITY_KIND.FEATURE, id, CHANGE_OP.REMOVE);
+      this.recordFeature(id, CHANGE_OP.REMOVE);
     }
   }
 
@@ -361,7 +572,7 @@ class MapStoreImpl implements MapStore {
     this.features.set(feature.id, feature);
     this.indexFeature(feature.layerId, feature.id);
     this.touch(feature.id, feature.rev);
-    this.journal.record(ENTITY_KIND.FEATURE, feature.id, CHANGE_OP.ADD);
+    this.recordFeature(feature.id, CHANGE_OP.ADD);
   }
 
   /** Var olan unsuru yenisiyle değiştirir; değişiklik yoksa yalnız zaman ve `rev` ilerler. */
@@ -377,7 +588,7 @@ class MapStoreImpl implements MapStore {
       this.indexFeature(next.layerId, next.id);
     }
     this.features.set(next.id, next);
-    this.journal.record(ENTITY_KIND.FEATURE, next.id, CHANGE_OP.UPDATE, mask);
+    this.recordFeature(next.id, CHANGE_OP.UPDATE, mask);
   }
 
   /** Gelen `rev` mevcut olandan eski veya eşitse true (ve sayaç artar). */
@@ -408,8 +619,8 @@ class MapStoreImpl implements MapStore {
       this.assertNoCycle(next.id, next.parentId);
       this.layers.set(next.id, next);
       this.insertChild(next.parentId, next.id);
-      this.journal.record(ENTITY_KIND.LAYER, next.id, CHANGE_OP.ADD);
-      this.journal.markStructure();
+      this.recordLayer(next.id, CHANGE_OP.ADD);
+      this.markStructure();
     }
   }
 
@@ -433,10 +644,10 @@ class MapStoreImpl implements MapStore {
     if (parentChanged) {
       this.removeChild(prev.parentId, next.id);
       this.insertChild(next.parentId, next.id);
-      this.journal.markStructure();
+      this.markStructure();
     }
     this.layers.set(next.id, next);
-    this.journal.record(ENTITY_KIND.LAYER, next.id, CHANGE_OP.UPDATE, mask);
+    this.recordLayer(next.id, CHANGE_OP.UPDATE, mask);
   }
 
   private moveLayer(id: string, parentId: string | null, index?: number): void {
@@ -457,8 +668,8 @@ class MapStoreImpl implements MapStore {
     this.childLayerIds.set(parentId, nextIds);
 
     if (!sameParent) this.layers.set(id, { ...prev, parentId });
-    this.journal.record(ENTITY_KIND.LAYER, id, CHANGE_OP.UPDATE, LAYER_CHANGE.PARENT);
-    this.journal.markStructure();
+    this.recordLayer(id, CHANGE_OP.UPDATE, LAYER_CHANGE.PARENT);
+    this.markStructure();
   }
 
   private removeLayers(ids: readonly string[]): void {
@@ -479,8 +690,8 @@ class MapStoreImpl implements MapStore {
     this.childLayerIds.delete(id);
     this.removeChild(layer.parentId, id);
     this.layers.delete(id);
-    this.journal.record(ENTITY_KIND.LAYER, id, CHANGE_OP.REMOVE);
-    this.journal.markStructure();
+    this.recordLayer(id, CHANGE_OP.REMOVE);
+    this.markStructure();
   }
 
   /** `id` katmanı `parentId` altına konursa döngü oluşur mu? Oluşursa hata fırlatır. */
@@ -517,7 +728,7 @@ class MapStoreImpl implements MapStore {
       }
       this.basemaps.set(next.id, next);
       this.sortedBasemaps = null;
-      this.journal.record(ENTITY_KIND.BASEMAP, next.id, CHANGE_OP.ADD);
+      this.recordBasemap(next.id, CHANGE_OP.ADD);
       if (next.visible) this.enforceExclusiveGroup(next);
     }
   }
@@ -537,7 +748,7 @@ class MapStoreImpl implements MapStore {
 
     this.basemaps.set(next.id, next);
     this.sortedBasemaps = null;
-    this.journal.record(ENTITY_KIND.BASEMAP, next.id, CHANGE_OP.UPDATE, mask);
+    this.recordBasemap(next.id, CHANGE_OP.UPDATE, mask);
 
     // Görünür hale geldi ya da görünürken başka bir gruba geçti → grubunda tek açık o olmalı.
     if (next.visible && (!prev.visible || prev.exclusiveGroup !== next.exclusiveGroup)) {
@@ -549,7 +760,7 @@ class MapStoreImpl implements MapStore {
     for (const id of ids) {
       if (!this.basemaps.delete(id)) continue;
       this.sortedBasemaps = null;
-      this.journal.record(ENTITY_KIND.BASEMAP, id, CHANGE_OP.REMOVE);
+      this.recordBasemap(id, CHANGE_OP.REMOVE);
     }
   }
 
@@ -563,7 +774,7 @@ class MapStoreImpl implements MapStore {
       // Var olan anahtarı güncellemek Map gezinmesini bozmaz.
       this.basemaps.set(other.id, { ...other, visible: false });
       this.sortedBasemaps = null;
-      this.journal.record(ENTITY_KIND.BASEMAP, other.id, CHANGE_OP.UPDATE, BASEMAP_CHANGE.VISIBLE);
+      this.recordBasemap(other.id, CHANGE_OP.UPDATE, BASEMAP_CHANGE.VISIBLE);
     }
   }
 
@@ -605,13 +816,13 @@ class MapStoreImpl implements MapStore {
     let changed = false;
     for (const id of current) {
       if (!next.has(id)) {
-        this.journal.flipSelection(id);
+        this.flipSelection(id);
         changed = true;
       }
     }
     for (const id of next) {
       if (!current.has(id)) {
-        this.journal.flipSelection(id);
+        this.flipSelection(id);
         changed = true;
       }
     }
@@ -636,7 +847,7 @@ class MapStoreImpl implements MapStore {
   private setHovered(id: string | null): void {
     if (id !== null && !this.features.has(id)) return;
     if (id === this.hovered) return;
-    this.journal.recordHover(this.hovered, id);
+    this.recordHover(this.hovered, id);
     this.hovered = id;
   }
 
@@ -648,6 +859,8 @@ class MapStoreImpl implements MapStore {
       this.featureIdsByLayer.set(layerId, ids);
     }
     ids.add(id);
+    this.pending.layerContents.add(layerId);
+    this.pending.any = true;
   }
 
   private unindexFeature(layerId: string, id: string): void {
@@ -655,5 +868,7 @@ class MapStoreImpl implements MapStore {
     if (!ids) return;
     ids.delete(id);
     if (ids.size === 0) this.featureIdsByLayer.delete(layerId);
+    this.pending.layerContents.add(layerId);
+    this.pending.any = true;
   }
 }
