@@ -162,14 +162,16 @@ Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md#e
 
 ## 0.5 Adapter sözleşmesi ve MockAdapter
 
-Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) · Klasör: `src/adapter/` · Durum: ⬜
+Tasarım: [design/05-adapter-and-events.md](../design/05-adapter-and-events.md) · Klasör: `src/adapter/` · Durum: 🔄 (uçtan uca test 0.3'te)
 
-- [ ] `MapCapabilities`, `MapAdapter`, `MountOptions` tipleri
-- [ ] `RenderBatch`, `Diff`, `RenderFeature`, `RenderGroup`, `FeatureStatePatch`, `FeatureVisualState`
-- [ ] `RenderContextBase`, `ImageAtlas` arayüzleri
-- [ ] `DrawSession` / `EditSession` için yer tutucu tipler (Faz 2'de doldurulur)
-- [ ] `MockAdapter`: batch'leri kaydeder, kamera durumunu tutar, `emit` ile sahte olay üretir
-- [ ] Uçtan uca test: store → MapSync → MockAdapter
+- [x] `MapCapabilities`, `MapAdapter`, `MountOptions` tipleri
+- [x] `RenderBatch`, `Diff`, `RenderFeature`, `RenderGroup`, `FeatureStatePatch`, `FeatureVisualState` + `isEmptyBatch`
+- [x] `RENDER_CHANGE` (efektif `OPACITY` / `Z_INDEX` / `GROUP` bitleri, 8+) ve `RENDER_CHANGE_ALL`
+- [x] `RenderContextBase`, `ImageAtlas` arayüzleri; `AdapterRenderer` (motor paketinde daraltılır)
+- [x] `DrawSession` / `EditSession` / `DrawOptions` için yer tutucu tipler (Faz 2'de doldurulur)
+- [x] `MockAdapter`: batch'leri kaydeder, "ekranda ne var" durumunu tutar, kamera, `emit` ile sahte olay, `takeBatches`
+- [x] Testler (`mock-adapter.test.ts`)
+- [ ] Uçtan uca test: store → MapSync → MockAdapter (MapSync'e bağlı; 0.3 ile birlikte yazılacak)
 
 ## 0.6 Registry'ler
 

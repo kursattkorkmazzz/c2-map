@@ -139,11 +139,19 @@ export type EncodedFeature = {
 };
 ```
 
+### `changed` maskesi
+
+`RenderFeature.changed` = unsurun kendi `FEATURE_CHANGE` bitleri (0–7) **|** MapSync'in hesapladığı
+efektif değer bitleri `RENDER_CHANGE` (8+): `OPACITY` (ata opaklığı değişti), `Z_INDEX` (katman
+taşındı / `z` değişti), `GROUP` (unsur başka render group'a geçti). Yeni çizilen unsurda
+`RENDER_CHANGE_ALL`. Adapter yalnız ilgili bitler set ise yeniden kodlar.
+
 ## MockAdapter
 
-Test için: `applyBatch` çağrılarını sırayla kaydeder, kamera durumunu bellekte tutar,
-`emit` ile sahte etkileşim olayı üretir. MapSync / birleştirme / görünürlük mantığı motorsuz
-test edilir.
+Test için: `applyBatch` çağrılarını sırayla kaydeder (`batches`, `takeBatches()`), batch'ler
+uygulandıktan sonra "ekranda ne var" durumunu tutar (`features`, `groups`, `basemaps`, `states`),
+kamera durumunu bellekte tutar, `emit` ile sahte etkileşim olayı üretir. MapSync / birleştirme /
+görünürlük mantığı motorsuz test edilir.
 
 ## EventRouter: global + hedefli abonelik
 
