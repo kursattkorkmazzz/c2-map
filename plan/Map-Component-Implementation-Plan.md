@@ -1,4 +1,4 @@
-# Map Component — Detaylı İmplementasyon Planı (rev. 2)
+# Map Component — Detaylı İmplementasyon Planı (rev. 3)
 
 **Framework- ve motor-bağımsız, genişletilebilir harita kütüphanesi**
 `@c2/map-core` + `@c2/map-react` + motor adapter paketleri (`@c2/map-maplibre`, sonra `@c2/map-cesium`)
@@ -22,6 +22,86 @@
 | Hot path | **React render yolunun dışında**: Store → MapSync → Adapter |
 | Reconciler | Yok. Deklaratif bileşenler adapter'a değil **store'a** yazar (bkz. §11) |
 | Store | Çekirdekte amaca özel `MapStore` (per-id abonelik + değişiklik günlüğü); zustand yalnız uygulama UI durumu için (bkz. §9) |
+
+**Rev. 3'te spike ile netleşen kararlar** (ayrıntı ve ölçümler: §0)
+
+| Konu | Karar |
+|---|---|
+| Veri ölçeği | Tasarım hedefi **50.000** canlı unsur (min. 3k korunur) |
+| Canlı birlikler | **deck.gl** (`IconLayer`, MapLibre içine *interleaved* gömülü). MapLibre GeoJSON yolu 50k'da donuyor |
+| Statik/seyrek unsurlar | MapLibre (altlık, kontrol tedbirleri, poligonlar, etiketler) → **karma model** |
+| Akıcı hareket | Mümkün (deck.gl, kare başına ara konum). Varsayılan açık/kapalı kararı §18 |
+| Zoom'a göre gösterim (LOD) | **Zorunlu**: uzak zoom'da nokta/küme, yakın zoom'da tam sembol (§6.10) |
+| Kümeleme | İlk sürümde yok; boş geçen "sunum aşaması" genişleme noktası bugünden konur (§6.10) |
+| Akıcı hareket modu | `off` / `on` / `auto` (çizim hızına göre, histerezisli) (§6.8) |
+| Sembol önbelleği | Kod başına tek görüntü; birliğe özel metin **görüntüye gömülmez**, etiket ayrı katman |
+| MapLibre sürümü | 6.x; deck.gl entegrasyonu Faz 1'de dokümana göre yapılır (§0.4, §18 #16) |
+
+---
+
+## 0. Spike bulguları (`apps/map-spike`)
+
+Teoriyi ölçümle doğrulamak için ayrı bir deneme uygulaması yazıldı: sahte backend
+(her birlik saniyede 1 mesaj), sade bir `MapStore`, dört çizim modu ve canlı ölçüm paneli.
+Sürümler: MapLibre GL JS 6.14, deck.gl 9.4, milsymbol 3.0.4 (APP-6 D).
+
+> **Ölçüm ortamı:** Headless Edge, gerçek GPU (Intel UHD, entegre), 1400×900. Sayılar
+> göreli karşılaştırma içindir; hedef donanımda yeniden ölçülmeli.
+> **Önemli:** "Sayfa FPS"i haritanın yenilendiğini göstermez. Asıl ölçüt
+> **harita çizimi / sn** (MapLibre `render` olayı) ve **işlenen mesaj / sn**'dir.
+
+### 0.1 Çizim modları
+
+| Mod | Ne yapar |
+|---|---|
+| 1. Her mesajda çiz | Mesaj başına bir `updateData` çağrısı (kötü yol, karşılaştırma için) |
+| 2. Biriktir + hepsini gönder | Saniyede 10 kez `setData` ile tüm veri |
+| 3. Biriktir + yalnız değişeni | Saniyede 10 kez `updateData` ile yalnız değişenler (rev. 2'deki yol) |
+| 4. deck.gl | Saniyede 10 kez değişenleri GPU'ya giden düz sayı dizilerine yaz |
+
+### 0.2 Sonuçlar (APP-6 sembolleriyle, 240 benzersiz sembol)
+
+| Senaryo | Harita çizimi / sn | İşlenen mesaj / sn | Ana thread besleme işi | Yorum |
+|---|---|---|---|---|
+| Mod 1, 10k (ok ikonlarıyla) | — | ~1.900 / 10.000 | ~650 ms/sn | Tarayıcı mesajlara yetişemiyor |
+| Mod 3, 10k | 14 | ~8.400 / 10.000 | 6 ms/sn | Kullanılabilir |
+| Mod 4, 10k | 10 | 10.000 / 10.000 | 2 ms/sn | Rahat |
+| Mod 4 + akıcı, 10k | 46 | 10.000 / 10.000 | 19 ms/sn | Akıcı |
+| **Mod 3, 50k** | **0** | 49.600 / 50.000 | 160 ms/sn | **Harita donuyor**: MapLibre işçisi yetişemiyor |
+| Mod 4, 50k | 10 | 50.000 / 50.000 | 3 ms/sn | Rahat |
+| Mod 4 + akıcı, 50k, genel görünüm (z 6.5) | 16 | 50.000 / 50.000 | 14 ms/sn | GPU sınırında (üst üste binen semboller) |
+| Mod 4 + akıcı, 50k, z 9 | 48 | 50.000 / 50.000 | 44 ms/sn | Akıcı |
+
+### 0.3 Çıkarımlar
+
+1. **Batch (biriktir, kare başına tek gönderim) en büyük kazanç:** mod 1 → 2'de ana thread
+   yükü ~100 kat düşüyor. §6.2 doğrulandı.
+2. **Yalnız değişeni göndermek, hepsini göndermekten her zaman iyi** (mod 3 > mod 2), çünkü
+   1 Hz'de her gönderimde birliklerin yalnız ~%10'u değişiyor.
+3. **MapLibre GeoJSON kaynağının tavanı ~10k–20k.** `updateData` yalnız değişeni alsa da işçi
+   indeksi ve sembol yerleşimini kaynağın tamamı için yeniden kuruyor; 50k'da harita hiç
+   yenilenmiyor. §6.8'deki "kaçış kapısı" canlı birlikler için **ana yol** oldu.
+4. **deck.gl'de 50k'daki sınır veri değil, ekranda aynı anda boyanan sembol sayısı.**
+   Yakınlaştırınca sorun kayboluyor → LOD zorunlu (§6.10).
+5. **Store / birleştirme / "ne değişti" listesi iki motorda da aynen kullanıldı.**
+   Çekirdek–adapter ayrımı (§1, §5) pratikte doğrulandı.
+
+### 0.4 Yolda çıkan uyumluluk notları
+
+- **MapLibre 6 + Vite:** MapLibre worker dosyasını kendi yanında arar; paketlenince yol kırılır.
+  `import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'; setWorkerUrl(workerUrl)` şart.
+- **MapLibre 6 ikon yükleme:** `styleimagemissing` olayı artık ikonu o istek için sağlayamıyor;
+  `map.setMissingStyleImageResolver(id => map.addImage(...))` kullanılmalı (§6.6 güncellendi).
+- **deck.gl 9.4 ↔ MapLibre 6:** `@deck.gl/mapbox`, MapLibre'nin iç `map.transform` alanını okuyor;
+  MapLibre 6'da bu alan `map._camera.transform`'a taşındı ve deck.gl her karede çöküyor.
+  Spike'ta `map.transform` getter'ı ile yamalandı. Kalıcı çözüm §18'de açık karar.
+- **deck.gl ikili (binary) veri:** Aynı typed array referansı tekrar verilirse deck.gl güncellemeyi
+  atlıyor. Her güncellemede diziyi **yeni bir sarmalayıcı nesneyle** (`{ value, size }`) verip
+  `updateTriggers` sürüm sayacını artırmak gerekiyor. Böylece değişmeyen öznitelikler
+  (ör. ikon ataması) yeniden hesaplanmıyor.
+- **milsymbol çapası:** Sembolün çapa noktası (çerçeve merkezi) görüntünün ortasında değil
+  (kademe işareti üstte). Motorlar ikonu ortadan yerleştirdiği için sembol, çapa ortaya gelecek
+  şekilde boşluklu bir tuvale çiziliyor.
 
 ---
 
@@ -67,6 +147,8 @@
        │ MapAdapter (sözleşme)                                             │
        │  @c2/map-maplibre: kind encoder → GeoJSON source.updateData(diff)│
        │                    seçim/hover → feature-state                    │
+       │                    canlı birlikler → deck.gl IconLayer (typed     │
+       │                    array, interleaved) — rev. 3                   │
        │  @c2/map-cesium (sonra): Primitive/Billboard koleksiyonları       │
        │  MockAdapter (test)                                               │
        └──────────────────────────────────┬────────────────────────────────┘
@@ -86,7 +168,7 @@
 |---|---|---|
 | `@c2/map-core` | Tipler, `MapStore`, `MapSync`, `EventRouter`, `MapAdapter` sözleşmesi, `FeatureKindRegistry`, `BasemapProviderRegistry`, `SymbologyRegistry` arayüzü, koordinat util, `MockAdapter`. | yok (ops. `mgrs`) |
 | `@c2/map-react` | `<Map>`, `<MapLayer>`, `<MapFeature>`, `<MapBasemap>`, `<MapOverlay>`, hook'lar (`useMap`, `useFeature`, `useFeatureEvent` …). Ayrı entry: `@c2/map-react/layer-tree` (headless-tree köprüsü). | `@c2/map-core`, react (peer) |
-| `@c2/map-maplibre` | `MapAdapter` MapLibre implementasyonu, kind encoder'ları, image atlas, draw entegrasyonu. | `maplibre-gl`, `@c2/map-core` |
+| `@c2/map-maplibre` | `MapAdapter` MapLibre implementasyonu, kind encoder'ları, image atlas, draw entegrasyonu. Canlı/yoğun kind'ler için deck.gl renderer'ı (MapLibre içine interleaved, §5.3). | `maplibre-gl`, `@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/mapbox`, `@c2/map-core` |
 | `@c2/map-symbology` | `SymbologyProvider` arayüzü + ortak önbellek/rasterize yardımcıları. | `@c2/map-core` |
 | `@c2/map-symbology-app6` | `milsymbol` tabanlı APP-6(D) sağlayıcısı (sonra 2525, kurum içi sembolojiler ayrı paket). | `milsymbol` |
 | `@c2/map-cesium` (sonra) | Cesium adapter. | `cesium` |
@@ -376,6 +458,12 @@ export interface MaplibreRenderContext extends RenderContextBase {
      (paint/layout değerleri `['get', '_x']` ile unsur özelliklerinden okunur).
   2. `encode(rf, ctx)` → `RenderFeature`'ı bir veya daha fazla düz GeoJSON feature'a
      çeviren **saf** fonksiyon.
+- **deck.gl (GPU dizileri, rev. 3):** Canlı ve yoğun kind'ler (birlikler) için. Unsur başına
+  motor nesnesi yine yok; render group başına bir `IconLayer` (gerekirse `ScatterplotLayer`)
+  ve id → indeks eşlemeli düz typed array'ler (konum, boyut, renk). Değişiklik = dizide birkaç
+  sayıyı yazmak + sarmalayıcı nesneyi yenilemek + `updateTriggers` sürümünü artırmak (§0.4).
+  Seçim/hover `autoHighlight` ve ayrı küçük bir vurgu katmanıyla; hit-test `pickObject` ile.
+  Adapter, kind başına hangi renderer'ın kullanılacağını seçer; çekirdek bunu bilmez.
 - **Cesium (imperatif, sonra):** `create/update/remove` ile Billboard/Primitive koleksiyonu.
 
 ```ts
@@ -456,12 +544,17 @@ useFeatureEvent(unitId, MAP_EVENT.CLICK, cb);
 
 | Metrik | Hedef |
 |---|---|
-| Unsur sayısı | 3.000 (tasarım payı 10.000) |
-| Gelen güncelleme | ~3.000 mesaj/sn tepe (3k unsur × 1 Hz) |
+| Unsur sayısı | 3.000 (tasarım hedefi **50.000**, rev. 3) |
+| Gelen güncelleme | ~3.000 mesaj/sn tipik, **50.000 mesaj/sn** tasarım tepesi (50k × 1 Hz) |
 | Haritaya uygulama | kare başına ≤ 1 flush, varsayılan en fazla **10 Hz** (ayarlanabilir) |
 | Ana thread flush maliyeti | **< 4 ms** (encode + diff + postMessage) |
 | Hover / seçim | 0 veri güncellemesi (yalnız feature-state) |
 | React rerender | yalnız değişen id'ye abone bileşenler |
+| Harita çizimi | Akıcı hareket kapalı: her flush ekrana yansımalı (≈ uygulama Hz'i). Akıcı hareket açık: ≥ 30/sn |
+| İşlenen mesaj | Gelen mesajın tamamı (birikme yok) |
+
+> Rev. 3 ölçüm notu: "sayfa FPS"i tek başına yanıltıcıdır; MapLibre 50k'da sayfa akıcıyken
+> harita hiç yenilenmiyordu. Bütçeler **harita çizimi / sn** ile izlenir (§0).
 
 ### 6.2 Boru hattı (pipeline)
 
@@ -487,6 +580,10 @@ useFeatureEvent(unitId, MAP_EVENT.CLICK, cb);
 10 ardışık konum güncellemesi tek `updateData` girdisine iner.
 
 ### 6.3 MapLibre'de kaynak/katman düzeni (render group)
+
+> Rev. 3: Bu bölüm MapLibre ile çizilen kind'ler (kontrol tedbirleri, poligonlar, çizimler,
+> en fazla ~10k seyrek değişen unsur) için geçerlidir. Canlı birlikler deck.gl renderer'ı ile
+> çizilir (§5.3, §0.3); render group kavramı orada da korunur (grup başına bir deck katmanı).
 
 Unsur başına motor nesnesi yerine **az sayıda GeoJSON source + data-driven style**:
 
@@ -541,12 +638,22 @@ Bayatlık (stale): MapSync her ~1 sn `lastUpdate` eşiğini aşan unsurlar için
 ### 6.6 İkonlar & askeri semboller (image atlas)
 
 - Sembol görüntüsü **benzersiz anahtar başına bir kez** üretilir:
-  `key = ${standard}:${hash(code, modifiers, size)}`. 3k birlik ≈ birkaç yüz benzersiz sembol.
+  `key = ${standard}:${hash(code, modifiers, size)}`. 3k birlik ≈ birkaç yüz benzersiz sembol
+  (spike: 50k birlik → 240 görüntü, tümünün üretimi tek seferlik ~0,2–1 sn).
+- **Anahtara birliğe özel değiştirici girmez** (benzersiz tanıtıcı, ad, sayısal değerler).
+  Girerse her birlik ayrı görüntü olur ve önbellek çöker. Bu metinler ayrı etiket katmanında çizilir.
 - Unsur yalnız `_icon: key` taşır; `icon-image: ['get', '_icon']`.
-- **Lazy üretim:** MapLibre `styleimagemissing` olayı → `symbology.render(key)` →
-  `map.addImage(key, imageData)`. Ekranda hiç görünmeyen sembol üretilmez.
+- **Lazy üretim (MapLibre 6):** `map.setMissingStyleImageResolver(key => …)` →
+  `symbology.render(key)` → `map.addImage(key, imageData)`. Ekranda hiç görünmeyen sembol
+  üretilmez. (`styleimagemissing` olayı MapLibre 6'da artık bunun için yeterli değil, §0.4.)
+- **deck.gl yolu:** `IconLayer` otomatik atlası (`getIcon` → `{ id: key, url, width, height }`);
+  deck.gl her yeni anahtarı bir kez yükleyip atlasa ekler. Sembol boyları farklı olduğu için
+  boyut birlik başına ikili dizi olarak verilir.
+- **Çapa:** Sembol, çapa noktası (çerçeve merkezi) tam ortaya gelecek şekilde boşluklu tuvale
+  çizilir (§0.4).
 - Ref-count + LRU: kullanılmayan görüntüler `removeImage` ile atılır.
-- Dönüş: `icon-rotate: ['get', '_rot']`, `icon-rotation-alignment: 'map'`.
+- Dönüş: `icon-rotate: ['get', '_rot']`, `icon-rotation-alignment: 'map'` (yalnız yönlü ikonlar;
+  askeri semboller döndürülmez, hareket yönü gerekirse ayrı bir ok katmanıyla gösterilir).
 - Etiketler: `text-field: ['get', '_label']`, çakışma yönetimi motorda.
 
 ### 6.7 Composite
@@ -555,22 +662,75 @@ Bayatlık (stale): MapSync her ~1 sn `lastUpdate` eşiğini aşan unsurlar için
 hepsi `_fid = id` taşır. Hit-test `_fid` üzerinden asıl unsura döner. Seçim state'i tüm
 parçalara uygulanır.
 
-### 6.8 Ölçek kaçış kapıları (gerekirse, v1 değil)
+### 6.8 Ölçek: deck.gl yolu (rev. 3'te ana yol)
 
-- **> ~10k hareketli unsur veya yumuşak interpolasyon (60 fps):** GeoJSON kaynağı
-  her karede güncellemek pahalı. Çözüm: MapLibre **custom layer** (deck.gl
-  `MapboxOverlay` interleaved) ile GPU attribute güncellemesi. Adapter içinde ikinci
-  bir renderer türü olarak eklenebilir; sözleşme değişmez.
+- **> ~10k hareketli unsur veya akıcı hareket:** GeoJSON kaynağını sık güncellemek
+  pahalı ve 50k'da harita donuyor (§0.2). Canlı birlikler deck.gl `IconLayer` ile çizilir
+  (`MapboxOverlay`, interleaved: MapLibre katman yığınına girer, aynı WebGL bağlamını paylaşır).
+  Adapter içinde ikinci renderer türüdür; sözleşme değişmez (§5.3).
+- **Akıcı hareket:** Her birlik için "nereden → nereye, ne zaman" tutulur; her karede ara konum
+  hesaplanıp konum dizisi GPU'ya yüklenir. Görüntü bir mesaj aralığı geriden gelir. 50k'da
+  kare başına ~1–2 ms JS; gerekirse ara konum hesabı shader'a taşınabilir.
+  **Mod:** `MOTION_MODE = { OFF, ON, AUTO }` (kullanıcı ayarı, harita bazında).
+  `AUTO`: adapter son birkaç saniyenin harita çizim hızını izler; eşiğin altına düşünce
+  (ör. < 25 çizim/sn) kapatır, belirgin biçimde üstüne çıkınca (ör. > 45) tekrar açar.
+  Histerezis (iki ayrı eşik + minimum bekleme süresi) gidip gelmeyi önler. Geçişte birlikler
+  zıplamaz: kapanırken son hedef konuma, açılırken mevcut konumdan devam edilir.
 - **Clustering:** milsym için özel kümeleme (MapLibre `cluster` yerine supercluster ile
-  sembol-farkında). Faz 4+.
+  sembol-farkında). LOD ile birlikte (§6.10).
 
-### 6.9 Spike'ta doğrulanacaklar
+### 6.9 Spike'ta doğrulananlar (§0)
 
-- `GeoJSONSource.updateData` + string `promoteId` davranışı ve 3k nokta × 10 Hz maliyeti
-  (kullanılan MapLibre sürümünde).
-- 3k milsym symbol layer'ının çakışma (collision) hesap maliyeti; gerekirse
-  `icon-allow-overlap` ile kapatma.
-- Ölçüm: Chrome Performance + `map.showTileBoundaries`/FPS sayacı; sentetik 3k akış üreteci.
+- ✅ `updateData` maliyeti: 10k'ya kadar kabul edilebilir, 50k'da harita donuyor.
+  (Spike sayısal `feature.id` kullandı; string `promoteId` davranışı hâlâ ayrıca doğrulanmalı.)
+- ✅ deck.gl ikili dizilerle 50k × 1 Hz: ana thread ~3 ms/sn, her flush ekrana yansıyor.
+- ✅ APP-6 sembol önbelleği: 50k birlik → 240 görüntü.
+- ⏳ 3k milsym symbol layer'ının çakışma (collision) hesap maliyeti: spike'ta açılıp kapatılabiliyor,
+  sistematik ölçülmedi.
+- ⏳ Hedef donanımda (ayrık GPU / operatör iş istasyonu) yeniden ölçüm.
+
+### 6.10 Zoom'a göre gösterim (LOD) — rev. 3, zorunlu
+
+Spike'ta 50k'da sınırı veri akışı değil, ekranda aynı anda boyanan sembol sayısı belirledi
+(akıcı hareketle z 6.5'te 16, z 9'da 48 çizim/sn). Genel görünümde 50k tam sembol zaten okunmaz.
+
+- **Uzak zoom:** kimlik renginde küçük nokta (`ScatterplotLayer`) veya sembol-farkında küme
+  ("bu bölgede 340 düşman birliği").
+- **Yakın zoom:** tam APP-6 sembolü (+ etiket).
+- Eşikler kind/katman bazında ayarlanabilir; geçiş kamera olayıyla (`viewchange`) yapılır,
+  veri yeniden gönderilmez (aynı diziler, farklı katman).
+- Spike'ta ölçülecek: eşik değerleri, nokta modunda 50k'da çizim/sn, kümeleme maliyeti.
+
+**Kümeleme için genişleme noktası ("sunum aşaması")**
+
+İlk sürümler kümeleme yokmuş gibi yazılır; ama sonradan eklemek tek bir parça takmak kadar
+kolay olmalı. Bunun için `MapSync` ile adapter arasına, varsayılan olarak boş geçen bir
+**sunum aşaması** konur:
+
+```
+MapStore → MapSync → RenderBatch → [sunum aşamaları] → adapter.applyBatch()
+                                     varsayılan: yok (batch aynen geçer)
+                                     sonra: ClusterStage, LodStage …
+```
+
+```ts
+export interface PresentationStage {
+  id: string;
+  /** Batch'i dönüştürür: unsurları gizleyebilir, yerlerine sentetik unsur (küme) koyabilir. */
+  process(batch: RenderBatch, ctx: PresentationContext): RenderBatch;
+  /** Kamera değişince yeniden hesap gerekiyor mu (ör. zoom eşiği geçildi)? */
+  onViewChange?(view: CameraView, ctx: PresentationContext): RenderBatch | null;
+}
+```
+
+Kurallar (bugünden uyulacak):
+- Sentetik unsurlar (küme) normal `RenderFeature` olarak akar; id'leri ayrı bir önekle
+  (`cluster:…`) üretilir ve store'a **yazılmaz**.
+- Hit-test ve olaylar sentetik id'yi tanır; `EventRouter` küme tıklamasını ayrı olay türüyle
+  iletir (ör. `cluster:click`, içerdiği unsur id'leriyle).
+- Seçim ve `feature-state` gerçek id'ler üzerinden kalır; kümelenen seçili unsur kümeyi vurgular.
+- Aşama kind'den bağımsızdır (konum + kimlik yeter); sembol-farkında kümeleme `kind`'e özel
+  bir `clusterKey(f)` ile sonra eklenir.
 
 ---
 
@@ -832,6 +992,10 @@ export type SymbolImage = { image: ImageData | ImageBitmap; width: number; heigh
 ```
 
 - `milsym` kind props: `{ standard: 'app6d', code: '...', modifiers: {...} }`.
+- `cacheKey` yalnız görüntüyü gerçekten değiştiren ve **birlikler arasında paylaşılan** alanları
+  içerir. Birliğe özel metin değiştiricileri (ör. benzersiz tanıtıcı) görüntüye değil etikete gider (§6.6).
+- APP-6(D) için SIDC 20 hanelidir: `sürüm|bağlam|kimlik|sembol seti|durum|KH/GK|kademe|varlık|değiştiriciler`
+  (spike: `100${kimlik}1000${kademe}${varlık}0000`).
 - İlk sağlayıcı `@c2/map-symbology-app6` (`milsymbol`, APP-6 D). Kurum içi semboloji =
   aynı arayüzü uygulayan yeni paket (ör. SVG şablon tabanlı).
 - Görüntüler image atlas üzerinden lazy üretilir ve önbelleklenir (§6.6).
@@ -867,8 +1031,11 @@ export type SymbolImage = { image: ImageData | ImageBitmap; width: number; heigh
   mantığı motorsuz test edilir.
 - **`MapStore` birim testleri**: transaction, coalescing tablosu, rev düşürme,
   replaceRemote, per-id abonelik sayısı.
-- **Yük üreteci**: sentetik 3k (ve 10k) unsur, 1 Hz konum + rastgele stil değişimi;
-  `apps/web` map-demo paneli FPS/flush süresi göstergesiyle.
+- **Yük üreteci**: sentetik 3k / 10k / 50k unsur, 1 Hz konum + rastgele stil değişimi;
+  `apps/web` map-demo paneli. Göstergeler: harita çizimi/sn, işlenen mesaj/sn, ana thread besleme
+  işi, en uzun kare, long task (spike'taki panel temel alınır).
+- **Otomatik perf testi**: Playwright + sistem tarayıcısı (gerçek GPU ile, `--use-angle=d3d11`);
+  GPU'suz (SwiftShader) ölçümler FPS için yanıltıcıdır.
 - Görsel/entegrasyon: Playwright (ops.).
 
 ---
@@ -877,12 +1044,12 @@ export type SymbolImage = { image: ImageData | ImageBitmap; width: number; heigh
 
 | Faz | Kapsam | Çıktı |
 |---|---|---|
-| **0 — Çekirdek** | `@c2/map-core`: tipler, `MapStore`, `MapSync`, `EventRouter`, registry'ler, `MockAdapter`. | Saf TS, testli. |
-| **0.5 — Perf spike** | Ham MapLibre ile 3k nokta × 10 Hz `updateData` + feature-state + 300 benzersiz sembol ölçümü. | Bütçelerin doğrulanması (§6.9). |
-| **1 — 2D MVP (MapLibre)** | `@c2/map-maplibre` (vector + marker + raster/image basemap); `@c2/map-react`; LayerTree köprüsü; map-demo paneli + yük üreteci. | Canlı akışı çizen, LayerTree ile yönetilen MVP. |
+| **0 — Çekirdek** | `@c2/map-core`: tipler, `MapStore`, `MapSync`, sunum aşaması arayüzü (boş), `EventRouter`, registry'ler, `MockAdapter`. | Saf TS, testli. |
+| **0.5 — Perf spike** ✅ | `apps/map-spike`: 4 çizim modu, 3k–50k, APP-6 sembolleri, deck.gl, akıcı hareket. | Bulgular §0. Kalan: LOD spike'ı (§6.10). |
+| **1 — 2D MVP** | `@c2/map-maplibre`: MapLibre (vector + marker + raster/image basemap) **ve canlı birlikler için deck.gl renderer'ı**; `@c2/map-react`; LayerTree köprüsü; map-demo paneli + yük üreteci. | Canlı akışı çizen, LayerTree ile yönetilen MVP. |
 | **2 — Etkileşim** | Seçim, hover, hedefli event'ler, context menu, overlay, MGRS util, çizim (terra-draw). | Operasyonel etkileşim. |
-| **3 — Semboloji** | `@c2/map-symbology` + APP-6 sağlayıcı + `milsym` renderer + image atlas; ingest Worker. | APP-6 birlikler, canlı. |
-| **4 — Composite & ölçek** | `composite`, vektör stil altlık birleştirme, sembol-farkında kümeleme, gerekirse deck.gl yolu. | Kompozisyon + ölçek. |
+| **3 — Semboloji** | `@c2/map-symbology` + APP-6 sağlayıcı + `milsym` renderer (MapLibre resolver + deck.gl atlas) + etiket katmanı + LOD; ingest Worker. | APP-6 birlikler, canlı, her zoom'da okunur. |
+| **4 — Composite & ölçek** | `composite`, vektör stil altlık birleştirme, sembol-farkında kümeleme, akıcı hareketin shader'a taşınması (gerekirse). | Kompozisyon + ölçek. |
 | **5 — 3D (Cesium)** | `@c2/map-cesium`, `model3d`, terrain, capability negotiation, 2D↔3D geçiş. | 3D + zarif düşüş. |
 
 ---
@@ -899,9 +1066,14 @@ export type SymbolImage = { image: ImageData | ImageBitmap; width: number; heigh
 | 6 | Semboloji | ✅ Registry; APP-6(D) ilk sağlayıcı |
 | 7 | Reconciler | ✅ Yok; store güdümlü senkron (§11) |
 | 8 | Çizim kütüphanesi | ⏳ Ayrı oturum; aday terra-draw (§15) |
-| 9 | Veri ölçeği | ✅ min. 3k canlı → batch pipeline (§6, §7) |
+| 9 | Veri ölçeği | ✅ min. 3k, tasarım hedefi 50k canlı → batch pipeline (§6, §7), spike ile doğrulandı (§0) |
 | 10 | Backend mesaj formatı | ⏳ Kısmi patch mı, tam nesne mi; `rev`/`ts` var mı; snapshot endpoint'i? |
 | 11 | Güncelleme frekansı | ⏳ Unsur başına beklenen Hz; haritaya uygulama tavanı (varsayılan 10 Hz) yeterli mi? |
-| 12 | Konum interpolasyonu | ⏳ 1 Hz zıplama kabul mü, yoksa yumuşak hareket (→ deck.gl yolu) mu? |
+| 12 | Konum interpolasyonu | ✅ Üç mod: `off` / `on` / `auto`. Kullanıcı seçebilir; `auto` harita çizim hızına göre açar/kapatır (§6.8) |
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma gereksinimi (glyph/sprite çakışması) |
 | 14 | Unsurlar LayerTree'de mi? | ⏳ Hangi katmanlar unsurlarını ağaçta listeler (sanallaştırma şart) |
+| 15 | Canlı birlik motoru | ✅ deck.gl (karma model). MapLibre GeoJSON 50k'da donuyor (§0.3) |
+| 16 | deck.gl ↔ MapLibre 6 uyumu | ✅ deck.gl dokümanında MapLibre 6 uyumluluğu belirtiliyor; Faz 1'de entegrasyon **dokümandaki yönteme göre** yapılacak. Kontrol maddesi: spike'ta `@deck.gl/mapbox` 9.4.0 + `MapboxOverlay` (interleaved) MapLibre 6.14'te `map.transform` hatası verdi (§0.4); entegrasyonda bu senaryo test edilmeli, yama yalnız gerekirse |
+| 17 | LOD / kümeleme | ✅ Kümeleme gerekecek, ama ilk sürümler **yokmuş gibi** yazılır. Mimari, sonradan eklemeyi kolaylaştıran bir genişleme noktası içerir (§6.10, "sunum aşaması") |
+| 18 | Etiketler | ⏸ Sonra karar verilecek; önce çekirdek |
+| 19 | Hedef donanım | ⏸ Değişken; karar verilecek. Tasarım düşük donanımda da çalışacak şekilde (LOD, `auto` akıcı hareket) yapılır |
