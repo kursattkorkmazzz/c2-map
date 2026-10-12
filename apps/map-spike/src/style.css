@@ -1,0 +1,82 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+#panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 300px;
+  padding: 12px;
+  background: rgba(20, 24, 30, 0.88);
+  color: #e6e6e6;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+#panel h1 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+#panel label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+#panel select,
+#panel input[type='number'] {
+  width: 150px;
+}
+
+#panel .hint {
+  margin: 2px 0 8px;
+  color: #9aa4b2;
+  font-size: 12px;
+}
+
+#panel table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+#panel td {
+  padding: 2px 0;
+}
+
+#panel td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+#panel .good {
+  color: #6fdc8c;
+}
+#panel .warn {
+  color: #f1c21b;
+}
+#panel .bad {
+  color: #ff6b6b;
+}
+
+#panel .selected {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #3a414c;
+  white-space: pre;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
