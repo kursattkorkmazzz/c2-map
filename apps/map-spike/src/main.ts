@@ -1,19 +1,29 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import type { MapGeoJSONFeature, MapMouseEvent } from 'maplibre-gl';
+import { DeckUnitRenderer } from './deck-renderer';
 import { UnitGenerator, type UnitMessage } from './generator';
-import { createMap, getUnitsSource, setBasemapVisible, setIconCollision, UNITS_ICON_LAYER, UNITS_SOURCE } from './map';
+import {
+  createMap,
+  getUnitsSource,
+  setBasemapVisible,
+  setIconCollision,
+  setUnitLayersVisible,
+  UNITS_ICON_LAYER,
+  UNITS_SOURCE,
+} from './map';
 import { RENDER_MODE, UnitRenderer, type RenderMode } from './renderer';
 import { Stats } from './stats';
 import { UnitStore } from './store';
 
-// ── Ayarlar (URL ile de verilebilir: ?n=10000&mode=batch-diff&hz=1&apply=10) ──
+// ── Ayarlar (URL ile de verilebilir: ?n=10000&mode=deck&hz=1&apply=10&smooth=0) ──
 const params = new URLSearchParams(location.search);
 const settings = {
   count: Number(params.get('n') ?? 3000),
   mode: (params.get('mode') ?? RENDER_MODE.BATCH_DIFF) as RenderMode,
   perUnitHz: Number(params.get('hz') ?? 1),
   applyHz: Number(params.get('apply') ?? 10),
+  smooth: params.get('smooth') !== '0',
   collision: false,
   basemap: true,
   paused: false,
@@ -22,6 +32,7 @@ const settings = {
 const map = await createMap(document.getElementById('map')!);
 const store = new UnitStore();
 const renderer = new UnitRenderer(getUnitsSource(map), store);
+const deck = new DeckUnitRenderer(map, store);
 const stats = new Stats();
 
 // ── Backend akışı → store (+ NAIVE modda doğrudan harita) ──
@@ -39,8 +50,25 @@ const generator = new UnitGenerator((msgs: UnitMessage[]) => {
 
 function resetUnits(): void {
   store.replaceAll(generator.reset(settings.count));
-  renderer.loadAll();
+  if (deck.isActive) deck.activate();
+  else renderer.loadAll();
   setSelected(null);
+}
+
+/** Mod değişince doğru çiziciyi aç, diğerini kapat. */
+function applyMode(): void {
+  const useDeck = settings.mode === RENDER_MODE.DECK;
+  if (useDeck && !deck.isActive) {
+    setUnitLayersVisible(map, false);
+    deck.activate();
+  } else if (!useDeck && deck.isActive) {
+    deck.deactivate();
+    setUnitLayersVisible(map, true);
+    // deck.gl modundayken MapLibre kaynağı güncellenmedi → tam yeniden yükle
+    store.drainChanges();
+    renderer.loadAll();
+  }
+  setSelected(selectedId);
 }
 
 // ── Kare döngüsü: saniyede en fazla `applyHz` kez flush ──
@@ -52,8 +80,14 @@ function frame(now: number): void {
   } else if (now - lastFlush >= 1000 / settings.applyHz - 1) {
     lastFlush = now;
     const t0 = performance.now();
-    const sent = renderer.flush(settings.mode);
+    const sent = deck.isActive ? deck.flush(now) : renderer.flush(settings.mode);
     if (sent > 0) stats.work(performance.now() - t0, sent, true);
+  }
+  if (deck.isActive && deck.smooth) {
+    // Akıcı hareket: her karede tüm birliklerin ara konumunu hesapla
+    const t0 = performance.now();
+    deck.animate(now);
+    stats.work(performance.now() - t0, 0, false);
   }
 
   if (stats.frame(now)) renderStats();
@@ -73,6 +107,7 @@ function setState(id: number | null, state: Record<string, boolean>): void {
 }
 
 function topUnitAt(e: MapMouseEvent): number | null {
+  if (deck.isActive) return deck.pick(e.point.x, e.point.y);
   const hits: MapGeoJSONFeature[] = map.queryRenderedFeatures(e.point, { layers: [UNITS_ICON_LAYER] });
   const id = hits[0]?.id;
   return typeof id === 'number' ? id : null;
@@ -82,6 +117,7 @@ function setSelected(id: number | null): void {
   setState(selectedId, { selected: false });
   selectedId = id;
   setState(selectedId, { selected: true });
+  deck.setSelected(id);
   renderSelected();
 }
 
@@ -119,9 +155,11 @@ panel.innerHTML = `
       <option value="${RENDER_MODE.NAIVE}">1. Her mesajda çiz</option>
       <option value="${RENDER_MODE.BATCH_FULL}">2. Biriktir + hepsini gönder</option>
       <option value="${RENDER_MODE.BATCH_DIFF}">3. Biriktir + yalnız değişeni</option>
+      <option value="${RENDER_MODE.DECK}">4. deck.gl (GPU dizileri)</option>
     </select>
   </label>
   <p class="hint" id="mode-hint"></p>
+  <label id="smooth-row">Akıcı hareket (deck.gl) <input type="checkbox" id="smooth" /></label>
   <label>Haritaya uygulama (Hz)
     <select id="apply">${[2, 5, 10, 20, 30, 60].map((n) => `<option value="${n}">${n}</option>`).join('')}</select>
   </label>
@@ -140,6 +178,7 @@ const applyEl = $<HTMLSelectElement>('apply');
 const collisionEl = $<HTMLInputElement>('collision');
 const basemapEl = $<HTMLInputElement>('basemap');
 const pausedEl = $<HTMLInputElement>('paused');
+const smoothEl = $<HTMLInputElement>('smooth');
 
 countEl.value = String(settings.count);
 hzEl.value = String(settings.perUnitHz);
@@ -147,14 +186,18 @@ modeEl.value = settings.mode;
 applyEl.value = String(settings.applyHz);
 collisionEl.checked = settings.collision;
 basemapEl.checked = settings.basemap;
+smoothEl.checked = settings.smooth;
 
 const MODE_HINTS: Record<RenderMode, string> = {
   [RENDER_MODE.NAIVE]: 'Her mesaj anında haritaya tek tek gider. Haritaya uygulama Hz ayarı kullanılmaz.',
   [RENDER_MODE.BATCH_FULL]: 'Mesajlar biriktirilir; her flush’ta TÜM birlikler yeniden gönderilir.',
   [RENDER_MODE.BATCH_DIFF]: 'Mesajlar biriktirilir; her flush’ta yalnız değişen birlikler gönderilir (planın yolu).',
+  [RENDER_MODE.DECK]:
+    'Mesajlar biriktirilir; deck.gl konumları doğrudan GPU dizilerine yazar. Akıcı harekette birlikler iki konum arasında kayar (bir mesaj aralığı geriden gelir).',
 };
 const renderModeHint = (): void => {
   $('mode-hint').textContent = MODE_HINTS[settings.mode];
+  $('smooth-row').style.display = settings.mode === RENDER_MODE.DECK ? '' : 'none';
 };
 renderModeHint();
 
@@ -164,10 +207,16 @@ countEl.onchange = () => {
 };
 hzEl.onchange = () => {
   settings.perUnitHz = generator.perUnitHz = Number(hzEl.value);
+  deck.durationMs = 1000 / settings.perUnitHz;
 };
 modeEl.onchange = () => {
   settings.mode = modeEl.value as RenderMode;
   renderModeHint();
+  applyMode();
+};
+smoothEl.onchange = () => {
+  settings.smooth = deck.smooth = smoothEl.checked;
+  if (deck.isActive) deck.activate(); // ara durumları temizle
 };
 applyEl.onchange = () => {
   settings.applyHz = Number(applyEl.value);
@@ -221,6 +270,9 @@ function renderSelected(): void {
 
 // ── Başlat ──
 generator.perUnitHz = settings.perUnitHz;
+deck.smooth = settings.smooth;
+deck.durationMs = 1000 / settings.perUnitHz;
 resetUnits();
+applyMode();
 generator.start();
 requestAnimationFrame(frame);

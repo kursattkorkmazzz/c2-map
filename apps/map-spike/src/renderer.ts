@@ -13,6 +13,8 @@ export const RENDER_MODE = {
   BATCH_FULL: 'batch-full',
   /** Biriktir, saniyede X kez YALNIZ değişenleri gönder (updateData). Plandaki yol. */
   BATCH_DIFF: 'batch-diff',
+  /** Biriktir, deck.gl ile doğrudan GPU dizilerine yaz (bkz. deck-renderer.ts). */
+  DECK: 'deck',
 } as const;
 export type RenderMode = (typeof RENDER_MODE)[keyof typeof RENDER_MODE];
 

@@ -9,7 +9,7 @@ export const UNITS_SOURCE = 'units';
 export const UNITS_ICON_LAYER = 'units-icon';
 const UNITS_HALO_LAYER = 'units-halo';
 
-const STATUS_COLORS = ['#3d8bfd', '#ff4d4f', '#52c41a', '#fadb14'] as const;
+export const STATUS_COLORS =['#3d8bfd', '#ff4d4f', '#52c41a', '#fadb14'] as const;
 
 export const iconName = (status: number): string => `unit-${status}`;
 
@@ -54,6 +54,13 @@ export function getUnitsSource(map: MaplibreMap): GeoJSONSource {
 
 export function setBasemapVisible(map: MaplibreMap, visible: boolean): void {
   map.setLayoutProperty('osm', 'visibility', visible ? 'visible' : 'none');
+}
+
+/** deck.gl modunda MapLibre'nin kendi birlik katmanları gizlenir. */
+export function setUnitLayersVisible(map: MaplibreMap, visible: boolean): void {
+  for (const id of [UNITS_HALO_LAYER, UNITS_ICON_LAYER]) {
+    map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  }
 }
 
 /** Çakışma (collision) hesabını aç/kapat. Açıkken üst üste binen ikonlar gizlenir ama CPU maliyeti artar. */
