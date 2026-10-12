@@ -98,9 +98,10 @@ Tasarım: [design/03-store.md](../design/03-store.md) · Klasör: `src/store/` �
 
 ### 0.2.8 Snapshot — `replaceLayerContents`
 
-- [ ] Katmanın doğrudan unsurlarını snapshot ile eşitle (olmayan → REMOVE, olan → upsert, `rev` kontrolü yok)
-- [ ] Başka katmana ait unsur snapshot'ta → reddet ve raporla
-- [ ] Test: diğer katmanlara dokunulmadığını doğrula
+- [x] Katmanın doğrudan unsurlarını snapshot ile eşitle (olmayan → REMOVE, olan → upsert, `rev` kontrolü yok)
+- [x] `rev` durumu snapshot'tan yeniden kurulur (rev'siz unsurun eski `rev`'i unutulur)
+- [x] Başka katmana ait unsur snapshot'ta → atlanır + `stats.rejectedSnapshotItems`
+- [x] Testler (`map-store.snapshot.test.ts`): diğer katmanlar ve alt katman etkilenmez, rev sıfırlama, yanlış kapsam, taşıma, referans korunması
 
 ### 0.2.9 Seçim ve hover
 

@@ -5,8 +5,8 @@
 // Tüm yazmalar `transaction(tx => …)` içinden yapılır; her yazma değişiklik günlüğüne
 // (ChangeJournal) düşer ve MapSync bunu `drainChanges()` ile alır.
 //
-// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur), 0.2.6 (katman) ve
-// 0.2.7 (altlık) hazır. Snapshot (0.2.8), seçim/hover (0.2.9) ve abonelik (0.2.10)
+// Durum: 0.2.4 (iç yapılar + okuma), 0.2.5 (transaction + unsur), 0.2.6 (katman),
+// 0.2.7 (altlık) ve 0.2.8 (snapshot) hazır. Seçim/hover (0.2.9) ve abonelik (0.2.10)
 // işlemleri sonraki adımlarda bu dosyaya eklenecek.
 
 import type { Basemap } from "../model/basemap";
@@ -36,8 +36,10 @@ export type MapStoreOptions = {
 export type MapStoreStats = {
   /** `rev`'i eski veya eşit olduğu için düşürülen yazmalar. */
   readonly droppedStale: number;
-  /** Store'da olmayan id'ye gelen (yok sayılan) patch'ler (unsur ve katman). */
+  /** Store'da olmayan id'ye gelen (yok sayılan) patch'ler (unsur, katman, altlık). */
   readonly ignoredPatches: number;
+  /** `replaceLayerContents`'te `layerId`'si hedef katmandan farklı olduğu için atlanan unsurlar. */
+  readonly rejectedSnapshotItems: number;
 };
 
 /** Transaction içinde kullanılabilen yazma işlemleri. Transaction dışında çağrılırsa hata fırlatır. */
@@ -48,6 +50,14 @@ export interface MapTx {
   patchFeatures(patches: readonly FeaturePatch[]): void;
   /** Siler; seçimden ve hover'dan da düşürür. Olmayan id sessizce yok sayılır. */
   removeFeatures(ids: readonly string[]): void;
+  /**
+   * Snapshot (ör. yeniden bağlanma): katmanın **doğrudan** unsurlarını listeyle birebir eşitler.
+   * Listede olmayan → silinir; olan → upsert (maske hesabıyla). Diğer katmanlara dokunulmaz.
+   * Snapshot yetkilidir: `rev` kontrolü yapılmaz ve unsurların `rev` durumu sıfırlanır
+   * (sunucu yeniden başlayıp `rev`'i sıfırlamış olabilir). `layerId`'si farklı olan unsur atlanır
+   * (`stats.rejectedSnapshotItems`).
+   */
+  replaceLayerContents(layerId: string, features: readonly Feature[]): void;
 
   /**
    * Tam nesne: yeni katman ebeveyninin **sonuna** eklenir. Var olan katmanda `parentId`
@@ -147,7 +157,7 @@ class MapStoreImpl implements MapStore {
 
   private readonly journal = new ChangeJournal();
   private readonly now: () => number;
-  private readonly mutableStats = { droppedStale: 0, ignoredPatches: 0 };
+  private readonly mutableStats = { droppedStale: 0, ignoredPatches: 0, rejectedSnapshotItems: 0 };
 
   /** Açık transaction derinliği (iç içe çağrılar için). */
   private depth = 0;
@@ -159,6 +169,8 @@ class MapStoreImpl implements MapStore {
       upsertFeatures: (features) => this.guard(() => this.upsertFeatures(features)),
       patchFeatures: (patches) => this.guard(() => this.patchFeatures(patches)),
       removeFeatures: (ids) => this.guard(() => this.removeFeatures(ids)),
+      replaceLayerContents: (layerId, features) =>
+        this.guard(() => this.replaceLayerContents(layerId, features)),
       upsertLayers: (layers) => this.guard(() => this.upsertLayers(layers)),
       patchLayer: (id, patch) => this.guard(() => this.patchLayer(id, patch)),
       moveLayer: (id, parentId, index) => this.guard(() => this.moveLayer(id, parentId, index)),
@@ -294,6 +306,34 @@ class MapStoreImpl implements MapStore {
       }
 
       this.journal.record(ENTITY_KIND.FEATURE, id, CHANGE_OP.REMOVE);
+    }
+  }
+
+  private replaceLayerContents(layerId: string, features: readonly Feature[]): void {
+    const incoming: Feature[] = [];
+    const incomingIds = new Set<string>();
+    for (const feature of features) {
+      if (feature.layerId !== layerId) {
+        this.mutableStats.rejectedSnapshotItems++;
+        continue;
+      }
+      incoming.push(feature);
+      incomingIds.add(feature.id);
+    }
+
+    // 1) Katmanda olup snapshot'ta olmayanlar silinir (kopya üzerinde gez: silme kümeyi değiştirir).
+    const current = this.featureIdsByLayer.get(layerId);
+    if (current) {
+      this.removeFeatures([...current].filter((id) => !incomingIds.has(id)));
+    }
+
+    // 2) Snapshot'takiler upsert edilir; `rev` kontrolü yok, `rev` durumu snapshot'tan yeniden kurulur.
+    //    Başka katmanda duran aynı id'li unsur bu katmana taşınır (snapshot yetkilidir).
+    for (const next of incoming) {
+      this.revs.delete(next.id);
+      const prev = this.features.get(next.id);
+      if (prev) this.replaceFeature(prev, next, next.rev);
+      else this.addFeature(next);
     }
   }
 

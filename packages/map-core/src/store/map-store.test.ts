@@ -37,7 +37,7 @@ describe("0.2.4 okuma — boş store", () => {
     expect(store.getSelection().size).toBe(0);
     expect(store.getHovered()).toBeNull();
     expect(store.getUpdatedAt("x")).toBeUndefined();
-    expect(store.stats).toEqual({ droppedStale: 0, ignoredPatches: 0 });
+    expect(store.stats).toEqual({ droppedStale: 0, ignoredPatches: 0, rejectedSnapshotItems: 0 });
   });
 
   it("drainChanges boş günlük döner", () => {

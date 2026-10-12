@@ -177,8 +177,15 @@ tx.replaceLayerContents("birlikler", snapshot);
 - Katmanın (yalnız **doğrudan** unsurları) snapshot ile birebir eşitlenir:
   snapshot'ta olmayan → REMOVE, olan → upsert (maske hesabıyla), `rev` kontrolü yok.
 - Diğer katmanlara **dokunulmaz**. Her backend akışı hangi katmanları beslediğini bilir.
-- Snapshot'taki bir unsurun `layerId`'si farklıysa hata (yanlış kapsam) → geliştirme modunda
-  fırlat, üretimde düşür ve raporla.
+- Snapshot'taki bir unsurun `layerId`'si farklıysa (yanlış kapsam) atlanır ve
+  `stats.rejectedSnapshotItems` artar. (Çekirdekte "geliştirme modu" kavramı yok; diğer
+  sözleşme ihlalleri gibi sayaçla raporlanır.)
+- Snapshot yetkilidir: `rev` kontrolü yapılmaz ve unsurların `rev` durumu snapshot'tan
+  **yeniden kurulur** (rev'siz gelen unsurun eski `rev`'i unutulur). Böylece sunucu yeniden
+  başlayıp `rev`'i sıfırladıysa sonraki deltalar yanlışlıkla düşürülmez.
+- Başka bir katmanda duran aynı id'li unsur snapshot ile bu katmana taşınır.
+- Aynı içerikli snapshot günlüğe hiçbir şey yazmaz; referanslar korunur (yeniden bağlanma
+  sonrası gereksiz yeniden çizim olmaz).
 
 ### Seçim ve hover
 
@@ -293,7 +300,7 @@ interface MapStore {
   getSelection(): ReadonlySet<string>;
   getHovered(): string | null;
   getUpdatedAt(featureId: string): number | undefined;
-  readonly stats: { droppedStale: number; ignoredPatches: number };
+  readonly stats: { droppedStale: number; ignoredPatches: number; rejectedSnapshotItems: number };
 
   // yazma
   transaction(fn: (tx: MapTx) => void): void;
