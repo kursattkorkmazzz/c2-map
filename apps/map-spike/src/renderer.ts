@@ -1,11 +1,10 @@
 import type { GeoJSONSource } from 'maplibre-gl';
-
-type GeoJSONFeatureDiff = NonNullable<Parameters<GeoJSONSource['updateData']>[0]['update']>[number];
 import type { UnitMessage } from './generator';
-import { iconName } from './map';
 import { CHANGE, type Unit, type UnitStore } from './store';
 
-// Haritaya veri göndermenin üç yolu. Spike'ın amacı bunları yan yana ölçmek.
+type GeoJSONFeatureDiff = NonNullable<Parameters<GeoJSONSource['updateData']>[0]['update']>[number];
+
+// Haritaya veri göndermenin yolları. Spike'ın amacı bunları yan yana ölçmek.
 export const RENDER_MODE = {
   /** Her mesaj geldiği anda haritaya tek tek gönder. (Kötü yol) */
   NAIVE: 'naive',
@@ -23,11 +22,12 @@ const toGeometry = (u: { lon: number; lat: number }): GeoJSON.Point => ({
   coordinates: [u.lon, u.lat],
 });
 
+// Haritaya yalnız stilin okuduğu alan gider: sembol kodu. Askeri semboller döndürülmez.
 const toFeature = (u: Unit): GeoJSON.Feature<GeoJSON.Point> => ({
   type: 'Feature',
   id: u.id,
   geometry: toGeometry(u),
-  properties: { icon: iconName(u.status), hdg: u.hdg },
+  properties: { icon: u.sidc },
 });
 
 export class UnitRenderer {
@@ -44,12 +44,16 @@ export class UnitRenderer {
   /** NAIVE mod: tek mesaj → tek updateData çağrısı. */
   applyMessage(msg: UnitMessage, mask: number): void {
     if (mask === 0) return;
-    const props: { key: string; value: unknown }[] = [{ key: 'hdg', value: msg.hdg }];
-    if (mask & CHANGE.PROPS && msg.status !== undefined) {
-      props.push({ key: 'icon', value: iconName(msg.status) });
-    }
+    const u = this.store.get(msg.id);
+    if (!u) return;
     void this.source.updateData({
-      update: [{ id: msg.id, newGeometry: toGeometry(msg), addOrUpdateProperties: props }],
+      update: [
+        {
+          id: msg.id,
+          newGeometry: toGeometry(u),
+          addOrUpdateProperties: mask & CHANGE.PROPS ? [{ key: 'icon', value: u.sidc }] : undefined,
+        },
+      ],
     });
   }
 
@@ -68,13 +72,10 @@ export class UnitRenderer {
     for (const [id, mask] of changes) {
       const u = this.store.get(id);
       if (!u) continue;
-      const props: { key: string; value: unknown }[] = [];
-      if (mask & CHANGE.GEOMETRY) props.push({ key: 'hdg', value: u.hdg });
-      if (mask & CHANGE.PROPS) props.push({ key: 'icon', value: iconName(u.status) });
       update.push({
         id,
         newGeometry: mask & CHANGE.GEOMETRY ? toGeometry(u) : undefined,
-        addOrUpdateProperties: props,
+        addOrUpdateProperties: mask & CHANGE.PROPS ? [{ key: 'icon', value: u.sidc }] : undefined,
       });
     }
     void this.source.updateData({ update });

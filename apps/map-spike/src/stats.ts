@@ -1,7 +1,8 @@
 // Saniyelik ölçümler. Her saniye sonunda `snapshot` güncellenir.
 
 export type StatsSnapshot = {
-  fps: number;
+  fps: number; // tarayıcının kare döngüsü (sayfa ne kadar akıcı)
+  mapRendersPerSec: number; // haritanın gerçekten yeniden çizildiği kare sayısı
   worstFrameMs: number; // son saniyedeki en uzun kare (takılma göstergesi)
   msgsPerSec: number;
   flushesPerSec: number;
@@ -14,6 +15,7 @@ export type StatsSnapshot = {
 export class Stats {
   snapshot: StatsSnapshot = {
     fps: 0,
+    mapRendersPerSec: 0,
     worstFrameMs: 0,
     msgsPerSec: 0,
     flushesPerSec: 0,
@@ -26,6 +28,7 @@ export class Stats {
   private windowStart = performance.now();
   private lastFrame = performance.now();
   private frames = 0;
+  private mapRenders = 0;
   private worstFrame = 0;
   private msgs = 0;
   private flushes = 0;
@@ -42,6 +45,10 @@ export class Stats {
     } catch {
       // longtask desteklenmiyor (Firefox/Safari)
     }
+  }
+
+  mapRendered(): void {
+    this.mapRenders++;
   }
 
   messages(n: number): void {
@@ -71,6 +78,7 @@ export class Stats {
     const k = 1000 / elapsed;
     this.snapshot = {
       fps: this.frames * k,
+      mapRendersPerSec: this.mapRenders * k,
       worstFrameMs: this.worstFrame,
       msgsPerSec: this.msgs * k,
       flushesPerSec: this.flushes * k,
@@ -80,7 +88,7 @@ export class Stats {
       longTasks: this.longTasks,
     };
     this.windowStart = now;
-    this.frames = this.msgs = this.flushes = this.sent = this.workMs = this.maxFlush = this.worstFrame = 0;
+    this.frames = this.mapRenders = this.msgs = this.flushes = this.sent = this.workMs = this.maxFlush = this.worstFrame = 0;
     this.longTasks = 0;
     return true;
   }

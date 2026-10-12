@@ -1,6 +1,6 @@
 import { Map as MaplibreMap, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { UNIT_STATUS_COUNT } from './generator';
+import type { SymbolCache } from './symbology';
 
 // MapLibre 6 worker'ı kendi yanında arar; Vite paketleyince bu yol kırılır → açıkça veriyoruz.
 setWorkerUrl(workerUrl);
@@ -8,10 +8,6 @@ setWorkerUrl(workerUrl);
 export const UNITS_SOURCE = 'units';
 export const UNITS_ICON_LAYER = 'units-icon';
 const UNITS_HALO_LAYER = 'units-halo';
-
-export const STATUS_COLORS =['#3d8bfd', '#ff4d4f', '#52c41a', '#fadb14'] as const;
-
-export const iconName = (status: number): string => `unit-${status}`;
 
 const style: StyleSpecification = {
   version: 8,
@@ -30,16 +26,28 @@ const style: StyleSpecification = {
   ],
 };
 
-export function createMap(container: HTMLElement): Promise<MaplibreMap> {
+export function createMap(container: HTMLElement, symbols: SymbolCache): Promise<MaplibreMap> {
   const map = new MaplibreMap({
     container,
     style,
     center: [32.85, 39.9],
     zoom: 6.5,
   });
+
+  // Tembel sembol üretimi: MapLibre, stilde adı geçen ama henüz eklenmemiş bir ikonla karşılaşınca
+  // bu fonksiyonu çağırır. Sembolü o anda üretip ekliyoruz → ekranda hiç görünmeyen sembol hiç üretilmez.
+  // (MapLibre 6: eski `styleimagemissing` olayı artık ikonu o istek için sağlayamıyor; resolver şart.)
+  map.setMissingStyleImageResolver((id) => {
+    if (map.hasImage(id)) return;
+    const img = symbols.get(id);
+    const ctx = img.canvas.getContext('2d')!;
+    map.addImage(id, ctx.getImageData(0, 0, img.canvas.width, img.canvas.height), {
+      pixelRatio: img.pixelRatio,
+    });
+  });
+
   return new Promise((resolve) => {
     map.once('load', () => {
-      addUnitIcons(map);
       addUnitLayers(map);
       resolve(map);
     });
@@ -69,30 +77,6 @@ export function setIconCollision(map: MaplibreMap, enabled: boolean): void {
   map.setLayoutProperty(UNITS_ICON_LAYER, 'icon-ignore-placement', !enabled);
 }
 
-// Her durum rengi için TEK bir ok ikonu üretilir; 10k birlik bu 4 görüntüyü paylaşır.
-function addUnitIcons(map: MaplibreMap): void {
-  const ratio = 2;
-  const size = 22 * ratio;
-  for (let s = 0; s < UNIT_STATUS_COUNT; s++) {
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-    ctx.translate(size / 2, size / 2);
-    ctx.beginPath();
-    ctx.moveTo(0, -size * 0.42);
-    ctx.lineTo(size * 0.3, size * 0.36);
-    ctx.lineTo(0, size * 0.18);
-    ctx.lineTo(-size * 0.3, size * 0.36);
-    ctx.closePath();
-    ctx.fillStyle = STATUS_COLORS[s] ?? '#fff';
-    ctx.strokeStyle = '#0b0e12';
-    ctx.lineWidth = 2 * ratio;
-    ctx.fill();
-    ctx.stroke();
-    map.addImage(iconName(s), ctx.getImageData(0, 0, size, size), { pixelRatio: ratio });
-  }
-}
-
 function addUnitLayers(map: MaplibreMap): void {
   // Unsur id'leri sayısal (feature.id) → hem updateData hem feature-state için güvenli.
   map.addSource(UNITS_SOURCE, {
@@ -100,7 +84,19 @@ function addUnitLayers(map: MaplibreMap): void {
     data: { type: 'FeatureCollection', features: [] },
   });
 
-  // Seçim / hover halkası: feature-state ile boyanır, veriye dokunmaz.
+  // Her unsur yalnız `icon: <SIDC>` taşır; görüntü önbellekten gelir.
+  map.addLayer({
+    id: UNITS_ICON_LAYER,
+    type: 'symbol',
+    source: UNITS_SOURCE,
+    layout: {
+      'icon-image': ['get', 'icon'],
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+    },
+  });
+
+  // Seçim / hover halkası (sembolün üstünde): feature-state ile boyanır, veriye dokunmaz.
   map.addLayer({
     id: UNITS_HALO_LAYER,
     type: 'circle',
@@ -108,8 +104,8 @@ function addUnitLayers(map: MaplibreMap): void {
     paint: {
       'circle-radius': [
         'case',
-        ['boolean', ['feature-state', 'selected'], false], 16,
-        ['boolean', ['feature-state', 'hovered'], false], 12,
+        ['boolean', ['feature-state', 'selected'], false], 24,
+        ['boolean', ['feature-state', 'hovered'], false], 20,
         0,
       ],
       'circle-color': 'rgba(0,0,0,0)',
@@ -119,19 +115,6 @@ function addUnitLayers(map: MaplibreMap): void {
         ['boolean', ['feature-state', 'selected'], false], '#ffffff',
         '#9ad0ff',
       ],
-    },
-  });
-
-  map.addLayer({
-    id: UNITS_ICON_LAYER,
-    type: 'symbol',
-    source: UNITS_SOURCE,
-    layout: {
-      'icon-image': ['get', 'icon'],
-      'icon-rotate': ['get', 'hdg'],
-      'icon-rotation-alignment': 'map',
-      'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
     },
   });
 }

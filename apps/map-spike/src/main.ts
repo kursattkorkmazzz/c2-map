@@ -15,6 +15,7 @@ import {
 import { RENDER_MODE, UnitRenderer, type RenderMode } from './renderer';
 import { Stats } from './stats';
 import { UnitStore } from './store';
+import { ECHELONS, ENTITIES, IDENTITIES, SymbolCache } from './symbology';
 
 // ── Ayarlar (URL ile de verilebilir: ?n=10000&mode=deck&hz=1&apply=10&smooth=0) ──
 const params = new URLSearchParams(location.search);
@@ -29,11 +30,14 @@ const settings = {
   paused: false,
 };
 
-const map = await createMap(document.getElementById('map')!);
+const symbols = new SymbolCache();
+const map = await createMap(document.getElementById('map')!, symbols);
+if (params.has('z')) map.jumpTo({ zoom: Number(params.get('z')) });
 const store = new UnitStore();
 const renderer = new UnitRenderer(getUnitsSource(map), store);
-const deck = new DeckUnitRenderer(map, store);
+const deck = new DeckUnitRenderer(map, store, symbols);
 const stats = new Stats();
+map.on('render', () => stats.mapRendered());
 
 // ── Backend akışı → store (+ NAIVE modda doğrudan harita) ──
 const generator = new UnitGenerator((msgs: UnitMessage[]) => {
@@ -238,7 +242,8 @@ function renderStats(): void {
   const s = stats.snapshot;
   const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { maximumFractionDigits: d, minimumFractionDigits: d });
   const rows: [string, string, string?][] = [
-    ['FPS', fmt(s.fps), grade(s.fps, 50, 30, true)],
+    ['FPS (sayfa)', fmt(s.fps), grade(s.fps, 50, 30, true)],
+    ['Harita çizimi / sn', fmt(s.mapRendersPerSec)],
     ['En uzun kare', `${fmt(s.worstFrameMs)} ms`, grade(s.worstFrameMs, 34, 100, false)],
     ['Gelen mesaj / sn', fmt(s.msgsPerSec)],
     ['Haritaya flush / sn', fmt(s.flushesPerSec)],
@@ -246,6 +251,8 @@ function renderStats(): void {
     ['Besleme işi (ms / sn)', fmt(s.mapWorkMsPerSec, 1), grade(s.mapWorkMsPerSec, 40, 150, false)],
     ['En uzun flush', `${fmt(s.maxFlushMs, 1)} ms`, grade(s.maxFlushMs, 4, 16, false)],
     ['Long task (>50 ms)', fmt(s.longTasks), grade(s.longTasks, 0, 2, false)],
+    ['Benzersiz sembol', fmt(symbols.size)],
+    ['Sembol üretimi (toplam)', `${fmt(symbols.renderMs)} ms`],
   ];
   $('stats').innerHTML = rows
     .map(([k, v, cls]) => `<tr><td>${k}</td><td class="${cls ?? ''}">${v}</td></tr>`)
@@ -262,8 +269,10 @@ function renderSelected(): void {
   el.textContent = [
     `Birlik #${u.id}`,
     `Konum : ${u.lat.toFixed(5)}, ${u.lon.toFixed(5)}`,
+    `Birim : ${ENTITIES[u.entity]?.name} ${ECHELONS[u.echelon]?.name}`,
+    `Kimlik: ${IDENTITIES[u.identity]?.name}`,
+    `SIDC  : ${u.sidc}`,
     `Yön   : ${u.hdg.toFixed(0)}°`,
-    `Durum : ${u.status}`,
     `Güncel: ${((performance.now() - u.updatedAt) / 1000).toFixed(1)} sn önce`,
   ].join('\n');
 }

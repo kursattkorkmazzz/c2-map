@@ -1,12 +1,16 @@
 // Sahte backend: N birlik, her biri saniyede `perUnitHz` kez konum mesajı yollar.
 // Gerçek hayattaki WebSocket akışını taklit eder: mesajlar küçük paketler halinde gelir.
 
+import { ECHELONS, ENTITIES, IDENTITIES } from './symbology';
+
 export type UnitMessage = {
   id: number;
   lon: number;
   lat: number;
   hdg: number; // derece, kuzeyden saat yönünde
-  status?: number; // yalnız değiştiğinde gelir (0..3)
+  identity?: number; // IDENTITIES indeksi; yalnız değiştiğinde gelir
+  entity?: number; // ENTITIES indeksi; yalnız ilk durumda (snapshot)
+  echelon?: number; // ECHELONS indeksi; yalnız ilk durumda (snapshot)
 };
 
 type SimUnit = {
@@ -14,16 +18,18 @@ type SimUnit = {
   lat: number;
   hdg: number;
   speedMps: number;
-  status: number;
+  identity: number;
+  entity: number;
+  echelon: number;
 };
 
-export const UNIT_STATUS_COUNT = 4;
+const randInt = (n: number): number => Math.floor(Math.random() * n);
 
 const TICK_MS = 50; // WS "paket" aralığı
 const CENTER: readonly [number, number] = [32.85, 39.9];
 const SPREAD_DEG = 3;
 const M_PER_DEG_LAT = 111_320;
-const STATUS_CHANGE_PROB = 0.01; // mesajların %1'inde durum (renk) değişir
+const IDENTITY_CHANGE_PROB = 0.01; // mesajların %1'inde kimlik (→ sembol) değişir
 
 export class UnitGenerator {
   private units: SimUnit[] = [];
@@ -43,11 +49,21 @@ export class UnitGenerator {
       hdg: Math.random() * 360,
       // Hareket gözle görülsün diye hızlandırılmış (200–600 m/s)
       speedMps: 200 + Math.random() * 400,
-      status: Math.floor(Math.random() * UNIT_STATUS_COUNT),
+      identity: randInt(IDENTITIES.length),
+      entity: randInt(ENTITIES.length),
+      echelon: randInt(ECHELONS.length),
     }));
     this.cursor = 0;
     this.carry = 0;
-    return this.units.map((u, id) => ({ id, lon: u.lon, lat: u.lat, hdg: u.hdg, status: u.status }));
+    return this.units.map((u, id) => ({
+      id,
+      lon: u.lon,
+      lat: u.lat,
+      hdg: u.hdg,
+      identity: u.identity,
+      entity: u.entity,
+      echelon: u.echelon,
+    }));
   }
 
   start(): void {
@@ -88,9 +104,9 @@ export class UnitGenerator {
       }
 
       const msg: UnitMessage = { id, lon: u.lon, lat: u.lat, hdg: u.hdg };
-      if (Math.random() < STATUS_CHANGE_PROB) {
-        u.status = (u.status + 1) % UNIT_STATUS_COUNT;
-        msg.status = u.status;
+      if (Math.random() < IDENTITY_CHANGE_PROB) {
+        u.identity = (u.identity + 1) % IDENTITIES.length;
+        msg.identity = u.identity;
       }
       msgs[i] = msg;
     }

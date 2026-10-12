@@ -1,11 +1,12 @@
 import type { UnitMessage } from './generator';
+import { buildSidc } from './symbology';
 
 // Planın MapStore'unun en sade hali: veriyi tutar ve "son flush'tan beri ne değişti"
 // listesini (dirty set) biriktirir. Haritaya hiç dokunmaz.
 
 export const CHANGE = {
   GEOMETRY: 1, // konum / yön
-  PROPS: 2, // görünümü etkileyen alanlar (durum → ikon rengi)
+  PROPS: 2, // görünümü etkileyen alanlar (kimlik → sembol)
 } as const;
 
 export type Unit = {
@@ -13,7 +14,10 @@ export type Unit = {
   lon: number;
   lat: number;
   hdg: number;
-  status: number;
+  identity: number;
+  entity: number;
+  echelon: number;
+  sidc: string; // türetilmiş: kimlik + varlık + kademe
   updatedAt: number;
 };
 
@@ -36,14 +40,22 @@ export class UnitStore {
 
   replaceAll(snapshot: UnitMessage[]): void {
     const now = performance.now();
-    this.units = snapshot.map((m) => ({
-      id: m.id,
-      lon: m.lon,
-      lat: m.lat,
-      hdg: m.hdg,
-      status: m.status ?? 0,
-      updatedAt: now,
-    }));
+    this.units = snapshot.map((m) => {
+      const identity = m.identity ?? 0;
+      const entity = m.entity ?? 0;
+      const echelon = m.echelon ?? 0;
+      return {
+        id: m.id,
+        lon: m.lon,
+        lat: m.lat,
+        hdg: m.hdg,
+        identity,
+        entity,
+        echelon,
+        sidc: buildSidc(identity, entity, echelon),
+        updatedAt: now,
+      };
+    });
     this.dirty.clear();
   }
 
@@ -59,8 +71,9 @@ export class UnitStore {
       u.hdg = msg.hdg;
       mask |= CHANGE.GEOMETRY;
     }
-    if (msg.status !== undefined && msg.status !== u.status) {
-      u.status = msg.status;
+    if (msg.identity !== undefined && msg.identity !== u.identity) {
+      u.identity = msg.identity;
+      u.sidc = buildSidc(u.identity, u.entity, u.echelon);
       mask |= CHANGE.PROPS;
     }
     u.updatedAt = performance.now();
