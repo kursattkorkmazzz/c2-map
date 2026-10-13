@@ -89,7 +89,43 @@ Prototipte hiç ölçülmeyen:
 
 ## Gerçek paketlerle karşılaştırma
 
-_Faz 1.5'te doldurulacak: her senaryo için spike değeri ↔ gerçek boru hattı değeri._
+_Faz 1.5'te (gerçek `@c2/map-maplibre` ile) doldurulacak: her senaryo için spike değeri ↔ gerçek boru hattı değeri._
+
+### Ön ölçüm: gerçek çekirdek + spike adapter'ları (2026-10-13)
+
+`apps/map-spike/core.html`: yük üreteci → `@c2/map-core` (store + MapSync + EventRouter) → spike'ta
+yazılmış ince adapter'lar (`src/core/maplibre-adapter.ts`, `src/core/deck-adapter.ts`). Adapter'lar
+Faz 1'in taslağıdır, nihai değildir. Aynı oturumda eski spike sayfası da yeniden ölçüldü.
+Ortam: headless Edge, gerçek GPU (Intel UHD), 1400×900.
+
+| Senaryo | Harita çizimi / sn (spike → çekirdek) | En uzun kare (ms) | İşlenen mesaj / sn | Ana thread işi (ms / sn) |
+|---|---|---|---|---|
+| MapLibre, 10k | 25 → 32 | 42 → 34 | 9.500 → 9.917 | 3 → 24 |
+| MapLibre, 50k | 4 → 1 | 183 → 192 | 30.000 → 42.540 | 32 → 141 |
+| deck.gl, 50k | 10 → 9 | 25 → 17 | 52.073 → 50.000 | 4 → 113 |
+| deck.gl + akıcı, 50k, z 6.5 | 21 → 22 | 75 → 50 | 50.808 → 49.184 | 17 → 111 |
+| deck.gl + akıcı, 50k, z 9 | 74 → 73 | 17 → 17 | 49.188 → 49.184 | 40 → 130 |
+
+> "Ana thread işi" iki sayfada aynı şeyi ölçmüyor: spike yalnız haritayı besleme anını sayıyordu
+> (kendi store'una yazma ölçülmüyordu); çekirdek sayfası **mesajdan patch üretimi + store transaction +
+> MapSync flush + adapter**'ın toplamını sayıyor.
+
+Çıkarımlar:
+
+1. **Çekirdek, çizim performansını değiştirmedi:** harita çizim hızı ve en uzun kare her senaryoda spike ile
+   aynı aralıkta. deck.gl 50k'da her flush ekrana yansıyor, takılma yok (long task 0).
+2. **MapLibre GeoJSON yolu 50k'da yine donuyor** (1–4 çizim/sn) — sorun çekirdekte değil, MapLibre işçisinde.
+   Canlı birlikler için deck.gl kararı (#15) doğrulandı.
+3. **Çekirdeğin bedeli 50k × 1 Hz'de ~110–140 ms/sn (ana thread'in ~%11–14'ü).** Node ölçümünde ~70 ms/sn idi;
+   fark tarayıcıdaki ek işler (patch nesnesi üretimi, adapter dizileri). Bütçeyi aşmıyor ama en büyük
+   iyileştirme alanı burası; MapSync'in en uzun flush'ı 5–6 ms (bütçe 4). Hangi parçanın ne kadar tuttuğu
+   (store / flush / adapter) ayrı ölçülmeli → Faz 1.5.3 iyileştirmeleri.
+4. **String `promoteId` + `updateData` çalışıyor:** birlik id'leri string (`u123`), kaynak `promoteId: 'id'`;
+   güncelleme, silme ve feature-state (seçim/hover halkası) sorunsuz.
+5. **Uçtan uca etkileşim çalışıyor:** tıklama → adapter hit-test → EventRouter → `store.select` → MapSync →
+   adapter state → seçim halkası; seçili birlik kartı `subscribeFeature` ile canlı güncelleniyor.
+6. Yan bulgu: hover/seçim halkası katmanında yarıçap 0 olsa da çerçeve çiziliyordu (her birlikte nokta);
+   `circle-stroke-opacity` ile düzeltildi (eski spike sayfasında da).
 
 ## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
 

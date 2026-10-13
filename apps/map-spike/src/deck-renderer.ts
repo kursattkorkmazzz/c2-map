@@ -18,7 +18,7 @@ type DeckIcon = { id: string; url: string; width: number; height: number };
  * Spike için alanı geri bağlıyoruz. Gerçek pakette: deck.gl MapLibre 6'yı resmi olarak
  * destekleyene kadar ya bu yama ya da MapLibre 5'e sabitleme gerekir.
  */
-function shimMaplibre6Transform(map: MaplibreMap): void {
+export function shimMaplibre6Transform(map: MaplibreMap): void {
   const m = map as unknown as { transform?: unknown; _camera?: { transform: unknown } };
   if (m.transform !== undefined || !m._camera) return;
   Object.defineProperty(map, 'transform', { get: () => m._camera!.transform, configurable: true });

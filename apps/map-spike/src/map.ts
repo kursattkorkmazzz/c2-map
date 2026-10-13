@@ -26,7 +26,11 @@ const style: StyleSpecification = {
   ],
 };
 
-export function createMap(container: HTMLElement, symbols: SymbolCache): Promise<MaplibreMap> {
+export function createMap(
+  container: HTMLElement,
+  symbols: SymbolCache,
+  options: { unitLayers?: boolean } = {},
+): Promise<MaplibreMap> {
   const map = new MaplibreMap({
     container,
     style,
@@ -48,7 +52,8 @@ export function createMap(container: HTMLElement, symbols: SymbolCache): Promise
 
   return new Promise((resolve) => {
     map.once('load', () => {
-      addUnitLayers(map);
+      // Çekirdek sayfası (core.html) kendi kaynağını kurar; eski spike sayfası bu katmanları kullanır.
+      if (options.unitLayers !== false) addUnitLayers(map);
       resolve(map);
     });
   });
@@ -109,6 +114,12 @@ function addUnitLayers(map: MaplibreMap): void {
         0,
       ],
       'circle-color': 'rgba(0,0,0,0)',
+      // Yarıçap 0 olsa da çerçeve çizilir → seçili/hover dışındakilerde tamamen saydam yap.
+      'circle-stroke-opacity': [
+        'case',
+        ['any', ['boolean', ['feature-state', 'selected'], false], ['boolean', ['feature-state', 'hovered'], false]], 1,
+        0,
+      ],
       'circle-stroke-width': 2,
       'circle-stroke-color': [
         'case',

@@ -26,6 +26,10 @@
 
 Her senaryo için spike değeri ile gerçek boru hattı yan yana yazılır.
 
+> **Ön ölçüm yapıldı (2026-10-13):** gerçek çekirdek + spike'ta yazılan ince adapter'larla
+> (`apps/map-spike/core.html`), sonuçlar [spike/findings.md](../spike/findings.md#ön-ölçüm-gerçek-çekirdek--spike-adapterları-2026-10-13).
+> Aşağıdaki maddeler, Faz 1'in gerçek `@c2/map-maplibre` paketiyle tekrarlanınca işaretlenir.
+
 - [ ] 10k birlik × 1 Hz — deck.gl renderer'ı, akıcı hareket kapalı / açık
 - [ ] 50k birlik × 1 Hz — deck.gl renderer'ı, akıcı hareket kapalı / açık; genel görünüm (z 6.5) ve yakın (z 9)
 - [ ] ~10k unsur MapLibre statik yolu (GeoJSON `updateData`) — seyrek değişen veri için tavanın doğrulanması
@@ -42,12 +46,15 @@ sonuçlar: [spike/findings.md](../spike/findings.md#çekirdek-ölçümü--node-m
 - [x] Id bazlı abonelerin store yazma maliyetine etkisi (200 abone) — ihmal edilebilir ✓
 - [ ] İyileştirme: yalnız-META UPDATE'leri katman değişikliği yokken MapSync'te doğrudan atla (şu an ~1,5–2 ms boşa)
 - [ ] İyileştirme: flush p95'ini düşür (değerlendirme döngüsünde nesne üretimini azalt); sonra yeniden ölç
-- [ ] Aynı ölçümün tarayıcıda (V8 + gerçek adapter ile) tekrarı — Faz 1 sonrası
+- [ ] Maliyetin parçalara ayrılması (patch üretimi / store / MapSync flush / adapter) — tarayıcıda toplam
+      ~110–140 ms/sn çıktı (Node'da ~70); en büyük parça bulunup iyileştirilecek
+- [ ] Aynı ölçümün tarayıcıda gerçek `@c2/map-maplibre` ile tekrarı — Faz 1 sonrası
+      (ön ölçüm spike adapter'larıyla yapıldı: flush en fazla 5–6 ms)
 - [ ] React: 200 id bazlı abone varken (kart, tablo satırı) yeniden çizim sayısı — `@c2/map-react` gerekli
 
 ## 1.5.4 MapLibre ve deck.gl ayrıntıları
 
-- [ ] String `promoteId` + `updateData` davranışı (spike sayısal `feature.id` kullanmıştı)
+- [x] String `promoteId` + `updateData` davranışı — çalışıyor (ekleme, güncelleme, silme, feature-state); `core.html` MapLibre modu
 - [ ] Sembol çakışma (collision) hesabının maliyeti
 - [ ] deck.gl ↔ MapLibre 6 entegrasyonu (dokümandaki yöntem) altında 50k performansı ([karar #16](../decisions.md))
 - [ ] `MOTION_MODE.AUTO` eşiklerinin (ör. 25 / 45 çizim/sn) gerçek ölçümle ayarlanması

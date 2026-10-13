@@ -110,6 +110,11 @@ Unsur başına motor nesnesi yerine **az sayıda GeoJSON source + veri güdüml�
 `map.setFeatureState({ source, id }, { selected: true })` veriye dokunmaz, yeniden tile'lamaz.
 Paint: `['case', ['boolean', ['feature-state', 'selected'], false], seçiliRenk, normalRenk]`.
 
+- String id'ler için kaynak `promoteId: 'id'` ile kurulur; `updateData` ve feature-state promote
+  edilen id ile çalışır (spike'ta doğrulandı).
+- Halka katmanında yarıçap 0 olsa da `circle-stroke` çizilir → seçili/hover dışındakilerde
+  `circle-stroke-opacity: 0` verilmeli (aksi halde her birlikte nokta ve gereksiz çizim).
+
 ### Composite
 
 `encode` birden çok parça döndürür (`${id}#icon`, `${id}#ring`, `${id}#label`), hepsi
