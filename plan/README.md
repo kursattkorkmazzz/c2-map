@@ -24,8 +24,9 @@
 | Faz | Dosya | Kapsam | Durum |
 |---|---|---|---|
 | 0 | [phase-0-core.md](phases/phase-0-core.md) | `@c2/map-core`: modeller, MapStore, MapSync, EventRouter, adapter sözleşmesi, MockAdapter | ✅ (bayatlık zamanlayıcısı sonraya) |
-| 1 | [phase-1-2d-mvp.md](phases/phase-1-2d-mvp.md) | MapLibre + deck.gl adapter, React binding, LayerTree, demo | ⬜ |
-| 1.5 | [phase-1.5-perf.md](phases/phase-1.5-perf.md) | Performans doğrulaması (gerçek paketlerle; spike sayıları referans) | ⬜ |
+| 1 | [phase-1-2d-mvp.md](phases/phase-1-2d-mvp.md) | Akış girişi (tam nesne / patch), MapLibre + deck.gl adapter, React binding, demo | ⬜ |
+| 1.5 | [phase-1.5-perf.md](phases/phase-1.5-perf.md) | Performans doğrulaması (gerçek paketlerle; spike sayıları referans) | 🔄 (çekirdek ön ölçümleri yapıldı) |
+| 1.6 | [phase-1.6-layer-tree.md](phases/phase-1.6-layer-tree.md) | Katman ağacı (LayerTree) | ⬜ (detaylandırılacak) |
 | 2 | [phase-2-interaction.md](phases/phase-2-interaction.md) | Seçim, hover, olaylar, overlay, çizim/düzenleme, MGRS | ⬜ |
 | 3 | [phase-3-symbology.md](phases/phase-3-symbology.md) | APP-6 semboloji, etiket, LOD, ingest Worker | ⬜ |
 | 4 | [phase-4-composite-scale.md](phases/phase-4-composite-scale.md) | Composite, kümeleme, vektör altlık birleştirme | ⬜ |

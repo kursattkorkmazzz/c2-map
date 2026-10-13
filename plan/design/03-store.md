@@ -353,3 +353,17 @@ React binding'i: `useSyncExternalStore(cb => store.subscribeFeature(id, cb), () 
   durumları günlükte birleşir, bellek O(unsur sayısı) kalır.
 - **Worker (Faz 3):** WS bağlantısı + JSON parse + normalize + birleştirme bir Web Worker'da;
   ana thread'e kare başına tek paket gelir. Ingest API batch odaklı olduğu için sözleşme değişmez.
+
+### En kötü durum: her mesajda tam nesne
+
+Backend'in mesaj formatı belli değil (karar #10); iki format da desteklenir ve **en kötü durum
+esas alınır**: her mesajda birliğin tamamı gelir.
+
+Sorun: JSON'dan her mesajda yeni `geometry` / `props` / `style` / `meta` nesneleri gelir. Store
+değişikliği referansla bulduğu için, içerik aynı olsa bile her alan "değişti" sayılır → yalnız
+konumu değişen 50k birlik için ikon/stil de değişmiş görünür ve adapter her flush'ta hepsini
+yeniden hesaplar.
+
+Çözüm (Faz 1.0): upsert yolunda referans farklıysa **değer karşılaştırması** yapılır; içerik
+aynıysa eski referans korunur. Hızlı yol (aynı referans) aynen kalır; değer karşılaştırması
+yalnız referans farklı olduğunda çalışır. Maliyet ölçülüp kısmi patch ile karşılaştırılır.

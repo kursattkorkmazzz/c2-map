@@ -8,6 +8,9 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-13 | **#10 Mesaj formatı:** kısmi patch ve tam nesne **ikisi de** desteklenir; **en kötü durum (her mesajda tam nesne) esas alınır**, değişikliği çekirdek bulur | Backend formatı belli değil; en kötü durumda da çalışmalı | [03](design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne), [Faz 1.0](phases/phase-1-2d-mvp.md#10-akış-girişi-tam-nesne-en-kötü-durum-ve-kısmi-patch) |
+| 2026-10-13 | **#11 Frekans:** birlik başına ≤ 1 Hz, haritaya uygulama tavanı 10 Hz | Ölçümler bu senaryoda rahat | [spike](spike/findings.md) |
+| 2026-10-13 | **LayerTree ayrı faz (1.6)**; #14 (unsurlar ağaçta mı) orada detaylandırılacak | Kapsamı ayrıca konuşulacak | [phase-1.6](phases/phase-1.6-layer-tree.md) |
 | 2026-10-13 | Faz 0.5 (spike) "tamamlandı" sayılmaz; **Faz 1.5 — Performans doğrulaması** olarak Faz 1'in arkasına taşındı. LOD ölçümü Faz 3.5'e, kümeleme ölçümü Faz 4.2'ye | Spike bir prototipti (kendi store'u, doğrudan motor çağrıları); gerçek paketlerle test ancak adapter ve demo hazır olunca mümkün. Spike sayıları referans değer olarak kalır | [phase-1.5](phases/phase-1.5-perf.md), [spike](spike/findings.md) |
 | 2026-10-12 | Plan birden fazla dosyaya bölündü (rev. 4): `design/`, `phases/`, `spike/`, `decisions.md` | Faz faz takip edilebilsin | [README](README.md) |
 | 2026-10-12 | **`Feature.origin` / `FeatureOrigin` kaldırıldı** | Unsurun kaynağı ömrü boyunca değişir (çizim → backend → refresh → düzenleme) | [02](design/02-core-model.md#neden-featureorigin-yok) |
@@ -27,10 +30,10 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 | # | Konu | Durum | Ne zaman gerekli |
 |---|---|---|---|
 | 8 | Çizim kütüphanesi | ⏳ Aday terra-draw ([09](design/09-interaction-and-editing.md#çizim-kütüphanesi)) | Faz 2 |
-| 10 | Backend mesaj formatı | ⏳ Kısmi patch mı, tam nesne mi; `rev`/`ts` var mı; snapshot endpoint'i? | Faz 1 (ingest) |
-| 11 | Güncelleme frekansı | ⏳ Unsur başına beklenen Hz; uygulama tavanı (10 Hz) yeterli mi? | Faz 1 |
+| 10 | Backend mesaj formatı | ✅ İkisi de; en kötü durum (tam nesne) esas. ⏳ Hâlâ açık: `rev`/`ts` var mı, snapshot endpoint'i nasıl? | Faz 1 (ingest) |
+| 11 | Güncelleme frekansı | ✅ ≤ 1 Hz / tavan 10 Hz | — |
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma (glyph/sprite çakışması) | Faz 4 |
-| 14 | Unsurlar LayerTree'de mi? | ⏳ Hangi katmanlar unsurlarını ağaçta listeler (sanallaştırma şart) | Faz 1 |
+| 14 | Unsurlar LayerTree'de mi? | ⏳ LayerTree fazında detaylandırılacak | Faz 1.6 |
 | 16 | deck.gl ↔ MapLibre 6 | ✅ Dokümana göre entegre; spike'taki `map.transform` hatası test edilecek | Faz 1 |
 | 17 | LOD eşikleri | ⏳ Hangi zoom'da nokta → sembol (Faz 3.5'teki ölçümle) | Faz 3 |
 | 18 | Etiketler | ⏸ Hangi zoom'dan itibaren; MapLibre mi deck.gl `TextLayer` mı | Faz 3 |

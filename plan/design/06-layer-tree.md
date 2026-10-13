@@ -1,6 +1,6 @@
 # 06 — Katman ağacı (LayerTree)
 
-← [Plan ana sayfası](../README.md) · Faz: [1](../phases/phase-1-2d-mvp.md)
+← [Plan ana sayfası](../README.md) · Faz: [1.6](../phases/phase-1.6-layer-tree.md) (detaylandırılacak)
 
 ## Ağaç yapısı
 

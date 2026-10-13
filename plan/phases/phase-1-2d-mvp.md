@@ -2,16 +2,23 @@
 
 ← [Plan ana sayfası](../README.md) · Durum: ⬜ · Önkoşul: Faz 0
 
-**Amaç:** Canlı akışı çizen, LayerTree ile yönetilen ilk çalışan sürüm.
+**Amaç:** Canlı akışı çizen ilk çalışan sürüm (gerçek paketler: `@c2/map-maplibre`, `@c2/map-react`).
 
 **Bitti sayılması için:** demo uygulamasında 10k canlı birlik + kontrol tedbirleri + altlıklar;
-LayerTree'den katman aç/kapa; yük üreteci ve ölçüm paneli çalışıyor. Bütçelerin ölçümle
-doğrulanması [Faz 1.5](phase-1.5-perf.md)'te.
+hem kısmi patch hem tam nesne akışı çalışıyor; yük üreteci ve ölçüm paneli çalışıyor. Bütçelerin
+ölçümle doğrulanması [Faz 1.5](phase-1.5-perf.md)'te. Katman ağacı ayrı fazda: [Faz 1.6](phase-1.6-layer-tree.md).
 
-## Açık kararlar (başlamadan)
-- [ ] #10 Backend mesaj formatı ([decisions](../decisions.md))
-- [ ] #11 Güncelleme frekansı
-- [ ] #14 Unsurlar LayerTree'de mi?
+## Kararlar
+- [x] #10 Backend mesaj formatı → **ikisi de desteklenir; en kötü durum (her mesajda tam nesne) esas alınır**, değişikliği çekirdek bulur ([decisions](../decisions.md))
+- [x] #11 Güncelleme frekansı → birlik başına ≤ 1 Hz, haritaya uygulama tavanı 10 Hz
+- [x] #14 Unsurlar LayerTree'de mi? → LayerTree ayrı faz ([1.6](phase-1.6-layer-tree.md)), karar orada
+
+## 1.0 Akış girişi: tam nesne (en kötü durum) ve kısmi patch
+Tasarım: [03](../design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne)
+- [ ] **Ölç:** tam nesne akışı (50k/sn upsert; her mesajda JSON'dan gelmiş gibi yeni `geometry` / `props` / `style` / `meta` nesneleri) — Node bench'e senaryo; MapSync'e giden upsert sayısı ve bitleri
+- [ ] **Değer karşılaştırması:** referans farklı ama içerik aynıysa eski referans korunur (koordinatlar; `style` / `props` / `meta` içerikleri) → maskede gereksiz bit yok, adapter ikon/stil yeniden hesaplamaz
+- [ ] **Akış yardımcısı:** aynı girişten kısmi patch (`{ id, …değişenler }`) ve tam nesne kabul eden ingest katmanı; yeniden bağlanmada `replaceLayerContents`
+- [ ] **Yeniden ölç:** Node bench + `core.html`'e "tam nesne" akış modu; kısmi patch ile karşılaştır
 
 ## 1.1 `@c2/map-maplibre` — temel adapter
 Tasarım: [05](../design/05-adapter-and-events.md), [04](../design/04-sync-and-rendering.md#maplibre-render-group)
@@ -47,17 +54,12 @@ Tasarım: [07](../design/07-react-api.md)
 - [ ] `useFeature`, `useLayer`, `useLayerVisibility`, `useSelection`
 - [ ] `useMapEvent`, `useLayerEvent`, `useFeatureEvent` (latest-ref)
 
-## 1.5 LayerTree köprüsü
-Tasarım: [06](../design/06-layer-tree.md)
-- [ ] `@c2/map-react/layer-tree`: dataLoader, controlled seçim, `onDrop` / `onRename`
-- [ ] Görünürlük için controlled checkbox (`checked` / `mixed`)
-- [ ] Throttle'lı `rebuildTree`; satır bazlı abonelik
-- [ ] (Karar #14'e göre) sanallaştırılmış unsur satırları
+## 1.5 LayerTree → [Faz 1.6](phase-1.6-layer-tree.md)'ya taşındı
 
 ## 1.6 Demo
 Tasarım: [10](../design/10-testing.md)
 - [ ] Demo uygulaması (spike'tan uyarlanan yük üreteci + ölçüm paneli, gerçek paketlerle)
-- [ ] Akış bağlantısı örneği: delta → transaction, reconnect → `replaceLayerContents`
+- [ ] Akış bağlantısı örneği: delta (kısmi patch veya tam nesne) → transaction, reconnect → `replaceLayerContents`
 - [ ] String `promoteId` ile `updateData` (statik yol) — davranış [Faz 1.5](phase-1.5-perf.md)'te ölçülür
 
 Ölçümler ve otomatik perf testi: [Faz 1.5](phase-1.5-perf.md).
