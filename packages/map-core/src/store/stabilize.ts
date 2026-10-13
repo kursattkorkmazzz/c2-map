@@ -11,6 +11,7 @@
 
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
+import { GEOMETRY_KIND, type Geometry, type LngLat } from "../model/geometry";
 import type { Layer } from "../model/layer";
 
 /**
@@ -32,11 +33,59 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   }
 
   if (!isPlainObject(a) || !isPlainObject(b)) return false;
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(b, key) || !deepEqual(a[key], b[key])) return false;
+  // Anahtar dizisi (Object.keys) üretmeden say ve karşılaştır: bu yol saniyede 50k kez çalışabilir.
+  let countA = 0;
+  for (const key in a) {
+    if (!hasOwn(a, key)) continue;
+    countA++;
+    if (!hasOwn(b, key) || !deepEqual(a[key], b[key])) return false;
   }
+  let countB = 0;
+  for (const key in b) if (hasOwn(b, key)) countB++;
+  return countA === countB;
+}
+
+/**
+ * Geometriye özel eşitlik: koordinatlar doğrudan sayı olarak karşılaştırılır, nesne üretilmez.
+ * Konum güncellemesi en sık değişiklik olduğu için genel `deepEqual`'dan belirgin biçimde ucuzdur.
+ */
+export function geometryEqual(a: Geometry, b: Geometry): boolean {
+  if (a === b) return true;
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case GEOMETRY_KIND.POINT:
+      return coordEqual(a.coord, (b as typeof a).coord);
+    case GEOMETRY_KIND.LINE:
+    case GEOMETRY_KIND.MULTI_POINT:
+      return listEqual(a.coords, (b as typeof a).coords, coordEqual);
+    case GEOMETRY_KIND.POLYGON:
+      return listEqual(a.rings, (b as typeof a).rings, ringEqual);
+    case GEOMETRY_KIND.MULTI_LINE:
+      return listEqual(a.lines, (b as typeof a).lines, ringEqual);
+    case GEOMETRY_KIND.MULTI_POLYGON:
+      return listEqual(a.polygons, (b as typeof a).polygons, (p, q) => listEqual(p, q, ringEqual));
+    case GEOMETRY_KIND.CIRCLE:
+      return Object.is(a.radiusM, (b as typeof a).radiusM) && coordEqual(a.center, (b as typeof a).center);
+    case GEOMETRY_KIND.RECTANGLE:
+      return coordEqual(a.min, (b as typeof a).min) && coordEqual(a.max, (b as typeof a).max);
+  }
+}
+
+function coordEqual(a: LngLat, b: LngLat): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false;
+  return true;
+}
+
+function ringEqual(a: readonly LngLat[], b: readonly LngLat[]): boolean {
+  return listEqual(a, b, coordEqual);
+}
+
+function listEqual<T>(a: readonly T[], b: readonly T[], equal: (x: T, y: T) => boolean): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!equal(a[i]!, b[i]!)) return false;
   return true;
 }
 
@@ -52,7 +101,7 @@ function stable<T>(prev: T, next: T): T {
 export function stabilizeFeature(prev: Feature, next: Feature): Feature {
   if (prev === next) return prev;
 
-  const geometry = stable(prev.geometry, next.geometry);
+  const geometry = geometryEqual(prev.geometry, next.geometry) ? prev.geometry : next.geometry;
   const style = stable(prev.style, next.style);
   const props = stable(prev.props, next.props);
   const meta = stable(prev.meta, next.meta);
@@ -95,6 +144,8 @@ export function stabilizeBasemap(prev: Basemap, next: Basemap): Basemap {
   const source = stable(prev.source, next.source);
   return source === next.source ? next : { ...next, source };
 }
+
+const hasOwn = (obj: object, key: string): boolean => Object.prototype.hasOwnProperty.call(obj, key);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") return false;

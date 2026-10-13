@@ -127,6 +127,39 @@ Ortam: headless Edge, gerçek GPU (Intel UHD), 1400×900.
 6. Yan bulgu: hover/seçim halkası katmanında yarıçap 0 olsa da çerçeve çiziliyordu (her birlikte nokta);
    `circle-stroke-opacity` ile düzeltildi (eski spike sayfasında da).
 
+## Tam nesne ↔ kısmi patch (2026-10-13)
+
+Karar #10: backend her mesajda birliğin tamamını gönderebilir (en kötü durum). Store, referansı
+değişmiş ama içeriği aynı alanların eski referansını korur (`store/stabilize.ts`); böylece yalnız
+konumu değişen birlik için adapter'a yalnız `GEOMETRY` biti gider.
+
+**Node, yalnız store** (mesaj nesneleri ölçüm dışında üretildi; 50k mesaj/sn, 20 paket):
+
+| | Medyan (ms/sn) | p95 |
+|---|---|---|
+| Kısmi patch | 46–48 | 72–100 |
+| Tam nesne | 87–98 | 123–129 |
+| MapSync flush %10, kısmi patch / tam nesne | 2,2–2,4 / 2,5–2,8 ms | GC'ye bağlı sıçramalar |
+
+İçerik karşılaştırmasının etkisi (A/B, stabilize kapalı ↔ açık):
+
+- **Kapalıyken** tam nesne akışında adapter'a fazladan bitler gidiyor (`props`/`style` "değişti") →
+  deck.gl her flush'ta 50k ikonu yeniden hesaplardı. Doğrulama bunu yakalıyor.
+- İlk sürüm kısmi patch'e de ~%20 bedel ekledi (53 → 64 ms/sn). Geometriye özel karşılaştırma
+  (koordinatlar doğrudan sayı olarak, nesne üretmeden) ve anahtar dizisi üretmeden sayım ile bu
+  bedel sıfırlandı (→ ~47–52); tam nesne 128 → ~90–110.
+
+**Tarayıcı, deck.gl 50k** (`core.html?format=full|patch`, akış yardımcısı üzerinden):
+
+| | Harita çizimi / sn | En uzun kare | Çekirdek + besleme işi |
+|---|---|---|---|
+| Kısmi patch | 10 | 25 ms | 105 ms/sn |
+| Tam nesne | 10 | 17 ms | 139 ms/sn |
+
+Sonuç: en kötü durum çalışıyor, harita tarafı etkilenmiyor; bedeli ana thread'de ~+%3–4.
+Kalıcı çözüm: Faz 3.6 ingest Worker'ı tam nesneyi ana thread'e göndermeden önce patch'e çevirebilir
+(son durumu Worker tutar) → ana thread her zaman ucuz yolda kalır.
+
 ## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
 
 Faz 1.5.3'ün tarayıcı gerektirmeyen kısmı. `@c2/map-core` (store + MapSync), hiçbir şey çizmeyen

@@ -120,8 +120,10 @@ function startedSync(store: MapStore) {
   return { sync, adapter };
 }
 
+/** Doğrulama hataları raporun sonunda listelenir (tablo yine basılır); varsa çıkış kodu 1. */
+const failures: string[] = [];
 function check(condition: boolean, message: string): void {
-  if (!condition) throw new Error(`Doğrulama başarısız: ${message}`);
+  if (!condition) failures.push(message);
 }
 
 // ── Senaryolar ───────────────────────────────────────────────────
@@ -140,17 +142,42 @@ measure(
 
 const store = seededStore();
 const perPacket = UNITS / PACKETS_PER_SEC;
+/** Ölçümden önce (setup'ta) hazırlanan paketler. */
+let packets: (FeaturePatch[] | Feature[])[] = [];
 
 // 2) Store yazma: 1 saniyelik canlı yük (50k mesaj, 20 paket)
 measure(
   `Store: 1 sn'lik akış (${PACKETS_PER_SEC} paket × ${perPacket.toLocaleString("tr-TR")} konum)`,
-  { iterations: 20, budget: 100, note: "ms/sn = ana thread'in yüzde kaçı (100 ms = %10)" },
-  () => store.drainChanges(),
+  {
+    iterations: 20,
+    budget: 100,
+    note: "ms/sn = ana thread'in yüzde kaçı (100 ms = %10). Mesaj nesneleri ölçüm DIŞINDA üretilir (gerçekte JSON parse üretir)",
+  },
   () => {
-    for (let p = 0; p < PACKETS_PER_SEC; p++) {
-      const patches = positionPatches(perPacket, p * perPacket);
-      store.transaction((tx) => tx.patchFeatures(patches));
-    }
+    store.drainChanges();
+    packets = Array.from({ length: PACKETS_PER_SEC }, (_, p) => positionPatches(perPacket, p * perPacket));
+  },
+  () => {
+    for (const patches of packets as FeaturePatch[][]) store.transaction((tx) => tx.patchFeatures(patches));
+  },
+);
+
+// 2b) Aynı yük, EN KÖTÜ DURUM: her mesaj birliğin tamamı (her iç nesne yeni — JSON gibi)
+/** `count` birliğin tam nesnesi; konum değişir, props/meta/style içerikleri aynı ama yeni nesne. */
+function fullObjects(count: number, offset = 0): Feature[] {
+  tick++;
+  return Array.from({ length: count }, (_, k) => ({ ...unit((offset + k) % UNITS), style: { size: 24 } }));
+}
+store.transaction((tx) => tx.upsertFeatures(fullObjects(UNITS))); // style alanını bir kez yerleştir
+measure(
+  `Store: 1 sn'lik akış, TAM NESNE (${PACKETS_PER_SEC} paket × ${perPacket.toLocaleString("tr-TR")})`,
+  { iterations: 20, budget: 100, note: "en kötü durum (karar #10): içerik karşılaştırması dahil; mesajlar ölçüm dışında üretilir" },
+  () => {
+    store.drainChanges();
+    packets = Array.from({ length: PACKETS_PER_SEC }, (_, p) => fullObjects(perPacket, p * perPacket));
+  },
+  () => {
+    for (const features of packets as Feature[][]) store.transaction((tx) => tx.upsertFeatures(features));
   },
 );
 
@@ -160,12 +187,12 @@ measure(
   measure(
     "Store: aynı 1 sn'lik akış + 200 unsur abonesi",
     { iterations: 20, budget: 100 },
-    () => store.drainChanges(),
     () => {
-      for (let p = 0; p < PACKETS_PER_SEC; p++) {
-        const patches = positionPatches(perPacket, p * perPacket);
-        store.transaction((tx) => tx.patchFeatures(patches));
-      }
+      store.drainChanges();
+      packets = Array.from({ length: PACKETS_PER_SEC }, (_, p) => positionPatches(perPacket, p * perPacket));
+    },
+    () => {
+      for (const patches of packets as FeaturePatch[][]) store.transaction((tx) => tx.patchFeatures(patches));
     },
   );
   offs.forEach((off) => off());
@@ -195,6 +222,33 @@ measure(
   () => sync.flush(),
 );
 check(adapter.stats.upserts === perFlush, `flush ${perFlush} upsert üretmeli (${adapter.stats.upserts})`);
+
+// 5b) Aynı flush, EN KÖTÜ DURUM: değişiklikler tam nesne olarak geldi
+let onlyGeometry = true;
+const geometryOnlyAdapter = {
+  applyBatch(batch: RenderBatch) {
+    adapter.applyBatch(batch);
+    onlyGeometry = (batch.features?.upsert ?? []).every((rf) => rf.changed === 1 /* GEOMETRY */);
+  },
+};
+{
+  const fullSync = new MapSync({ store, adapter: geometryOnlyAdapter, scheduler: createManualScheduler() });
+  sync.stop();
+  fullSync.start();
+  measure(
+    `MapSync flush: ${perFlush.toLocaleString("tr-TR")} değişen, TAM NESNE (%10)`,
+    { iterations: 30, budget: 4, note: "adapter yalnız GEOMETRY bitini görmeli (ikon/stil yeniden hesaplanmaz)" },
+    () => {
+      const features = fullObjects(perFlush, (tick * perFlush) % UNITS);
+      store.transaction((tx) => tx.upsertFeatures(features));
+    },
+    () => fullSync.flush(),
+  );
+  check(onlyGeometry, "tam nesne akışında adapter'a yalnız GEOMETRY biti gitmeli");
+  fullSync.stop();
+  sync.start();
+  adapter.stats.upserts = 0;
+}
 
 // 6) MapSync flush: düşük yük (%1)
 measure(
@@ -294,5 +348,13 @@ console.table(
 );
 for (const r of results) if (r.note) console.log(`• ${r.name}: ${r.note}`);
 // Çekirdeğin tsconfig'inde Node tipleri bilinçli olarak yok; `process`'e tipsiz erişiyoruz.
-const node = (globalThis as { process?: { version: string; platform: string; arch: string } }).process;
+const node = (globalThis as {
+  process?: { version: string; platform: string; arch: string; exitCode?: number };
+}).process;
 if (node) console.log(`\nNode ${node.version} · ${node.platform} ${node.arch}`);
+
+if (failures.length > 0) {
+  console.log("\n✗ DOĞRULAMA HATALARI:");
+  for (const f of failures) console.log(`  - ${f}`);
+  if (node) node.exitCode = 1;
+}

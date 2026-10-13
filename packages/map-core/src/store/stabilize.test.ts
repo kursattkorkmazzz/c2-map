@@ -3,7 +3,8 @@ import { BASEMAP_SOURCE, type Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
 import { GEOMETRY_KIND } from "../model/geometry";
 import type { Layer } from "../model/layer";
-import { deepEqual, stabilizeBasemap, stabilizeFeature, stabilizeLayer } from "./stabilize";
+import type { Geometry } from "../model/geometry";
+import { deepEqual, geometryEqual, stabilizeBasemap, stabilizeFeature, stabilizeLayer } from "./stabilize";
 
 /** JSON'dan her mesajda yeniden üretilmiş gibi: içerik aynı, tüm iç nesneler yeni. */
 const fresh = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -37,6 +38,29 @@ describe("deepEqual", () => {
   it("düz olmayan nesneler yalnız referansla eşit", () => {
     expect(deepEqual(new Date(0), new Date(0))).toBe(false);
     expect(deepEqual(new Float32Array([1]), new Float32Array([1]))).toBe(false);
+  });
+});
+
+describe("geometryEqual", () => {
+  const cases: [string, Geometry, Geometry][] = [
+    ["point", { kind: GEOMETRY_KIND.POINT, coord: [1, 2] }, { kind: GEOMETRY_KIND.POINT, coord: [1, 3] }],
+    ["point (irtifa)", { kind: GEOMETRY_KIND.POINT, coord: [1, 2, 100] }, { kind: GEOMETRY_KIND.POINT, coord: [1, 2] }],
+    ["line", { kind: GEOMETRY_KIND.LINE, coords: [[0, 0], [1, 1]] }, { kind: GEOMETRY_KIND.LINE, coords: [[0, 0], [1, 2]] }],
+    ["multi-point", { kind: GEOMETRY_KIND.MULTI_POINT, coords: [[0, 0]] }, { kind: GEOMETRY_KIND.MULTI_POINT, coords: [[0, 0], [1, 1]] }],
+    ["polygon", { kind: GEOMETRY_KIND.POLYGON, rings: [[[0, 0], [1, 0], [0, 1]]] }, { kind: GEOMETRY_KIND.POLYGON, rings: [[[0, 0], [1, 0], [0, 2]]] }],
+    ["multi-line", { kind: GEOMETRY_KIND.MULTI_LINE, lines: [[[0, 0], [1, 1]]] }, { kind: GEOMETRY_KIND.MULTI_LINE, lines: [[[0, 0], [1, 1]], [[2, 2], [3, 3]]] }],
+    ["multi-polygon", { kind: GEOMETRY_KIND.MULTI_POLYGON, polygons: [[[[0, 0], [1, 0], [0, 1]]]] }, { kind: GEOMETRY_KIND.MULTI_POLYGON, polygons: [[[[0, 0], [1, 0], [0, 9]]]] }],
+    ["circle", { kind: GEOMETRY_KIND.CIRCLE, center: [1, 1], radiusM: 100 }, { kind: GEOMETRY_KIND.CIRCLE, center: [1, 1], radiusM: 200 }],
+    ["rectangle", { kind: GEOMETRY_KIND.RECTANGLE, min: [0, 0], max: [1, 1] }, { kind: GEOMETRY_KIND.RECTANGLE, min: [0, 0], max: [1, 2] }],
+  ];
+
+  it.each(cases)("%s: içerik aynı yeni nesne → eşit; farklı → değil", (_name, a, different) => {
+    expect(geometryEqual(a, fresh(a))).toBe(true);
+    expect(geometryEqual(a, different)).toBe(false);
+  });
+
+  it("farklı tür → eşit değil", () => {
+    expect(geometryEqual({ kind: GEOMETRY_KIND.POINT, coord: [0, 0] }, { kind: GEOMETRY_KIND.MULTI_POINT, coords: [[0, 0]] })).toBe(false);
   });
 });
 

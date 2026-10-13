@@ -1,7 +1,7 @@
 // core.html: spike'ın yük üreteci + gerçek @c2/map-core boru hattı.
 //   üreteç → store.transaction → MapSync (kare başına tek flush) → adapter (MapLibre | deck.gl)
 //   adapter hit-test → EventRouter → store (seçim / hover) → MapSync → adapter (feature-state)
-// URL: ?engine=deck|maplibre&n=10000&hz=1&apply=10&smooth=0&z=9
+// URL: ?engine=deck|maplibre&format=full|patch&n=10000&hz=1&apply=10&smooth=0&z=9
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../style.css';
@@ -14,10 +14,14 @@ import {
   GEOMETRY_KIND,
   MAP_EVENT,
   MapSync,
+  STREAM_FORMAT,
   SymbologyRegistry,
+  createLayerStream,
   type Feature,
   type FeaturePatch,
   type Scheduler,
+  type StreamFormat,
+  type StreamItem,
 } from '@c2/map-core';
 import { UnitGenerator, type UnitMessage } from '../generator';
 import { Stats } from '../stats';
@@ -40,6 +44,8 @@ const settings = {
   applyHz: Number(params.get('apply') ?? 10),
   smooth: params.get('smooth') !== '0',
   zoom: params.has('z') ? Number(params.get('z')) : 6.5,
+  /** Mesaj formatı: en kötü durum (tam nesne) varsayılan — karar #10. */
+  format: (params.get('format') === STREAM_FORMAT.PATCH ? STREAM_FORMAT.PATCH : STREAM_FORMAT.FULL) as StreamFormat,
 };
 
 // ── Çekirdek ─────────────────────────────────────────────────────
@@ -86,35 +92,42 @@ const sync = new MapSync({
 });
 sync.start();
 
-// ── Yük üreteci → store ──────────────────────────────────────────
+// ── Yük üreteci → akış (createLayerStream) → store ───────────────
+// Üretecin mesajları "backend biçimi" sayılır; normalize onları modele çevirir.
+//   full  : her mesaj birliğin TAMAMI (en kötü durum; props/meta/style her seferinde yeni nesne)
+//   patch : yalnız değişen alanlar (konum + varsa yeni sembol)
 
 const unitId = (n: number) => `u${n}`;
 let entityOf: number[] = [];
 let echelonOf: number[] = [];
+let identityOf: number[] = [];
 
-const toFeature = (m: UnitMessage): Feature => ({
+const fullFeature = (m: UnitMessage): StreamItem => ({
   id: unitId(m.id),
-  layerId: LAYER_ID,
   kind: 'milsym',
   geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
-  props: { sidc: buildSidc(m.identity ?? 0, m.entity ?? 0, m.echelon ?? 0) },
+  props: { sidc: buildSidc(identityOf[m.id] ?? 0, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) },
+  style: { size: 24 },
   meta: { hdg: m.hdg },
 });
 
+const normalize = (m: UnitMessage): StreamItem => {
+  if (m.identity !== undefined) identityOf[m.id] = m.identity;
+  if (settings.format === STREAM_FORMAT.FULL) return fullFeature(m);
+  const patch: FeaturePatch = {
+    id: unitId(m.id),
+    geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
+    meta: { hdg: m.hdg },
+  };
+  if (m.identity !== undefined) patch.props = { sidc: buildSidc(m.identity, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) };
+  return patch;
+};
+
+const stream = createLayerStream<UnitMessage>(store, { layerId: LAYER_ID, format: settings.format, normalize });
+
 const generator = new UnitGenerator((msgs) => {
   const t0 = performance.now();
-  const patches: FeaturePatch[] = msgs.map((m) => {
-    const patch: FeaturePatch = {
-      id: unitId(m.id),
-      geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
-      meta: { hdg: m.hdg },
-    };
-    if (m.identity !== undefined) {
-      patch.props = { sidc: buildSidc(m.identity, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) };
-    }
-    return patch;
-  });
-  store.transaction((tx) => tx.patchFeatures(patches)); // bir WS paketi = bir transaction
+  stream.update(msgs); // bir WS paketi = bir transaction
   stats.work(performance.now() - t0, 0, false);
   stats.messages(msgs.length);
 });
@@ -124,8 +137,11 @@ function resetUnits(): void {
   const snapshot = generator.reset(settings.count);
   entityOf = snapshot.map((m) => m.entity ?? 0);
   echelonOf = snapshot.map((m) => m.echelon ?? 0);
-  // Yeniden bağlanma ile aynı yol: katmanı snapshot ile eşitle
-  store.transaction((tx) => tx.replaceLayerContents(LAYER_ID, snapshot.map(toFeature)));
+  identityOf = snapshot.map((m) => m.identity ?? 0);
+  // Yeniden bağlanma ile aynı yol: katmanı snapshot ile eşitle (snapshot her zaman tam nesne)
+  store.transaction((tx) =>
+    tx.replaceLayerContents(LAYER_ID, snapshot.map((m) => ({ ...(fullFeature(m) as Feature), layerId: LAYER_ID }))),
+  );
 }
 
 store.transaction((tx) =>
@@ -182,6 +198,12 @@ panel.innerHTML = `
       ${option(ENGINE.MAPLIBRE, 'MapLibre (GeoJSON)', settings.engine)}
     </select>
   </label>
+  <label>Mesaj formatı
+    <select id="format">
+      ${option(STREAM_FORMAT.FULL, 'Tam nesne (en kötü)', settings.format)}
+      ${option(STREAM_FORMAT.PATCH, 'Kısmi patch', settings.format)}
+    </select>
+  </label>
   <label>Birlik sayısı
     <select id="count">${[1000, 3000, 10000, 20000, 50000].map((n) => option(n, n.toLocaleString('tr-TR'), settings.count)).join('')}</select>
   </label>
@@ -209,6 +231,7 @@ function reloadWith(changes: Record<string, string>): void {
   next.set('hz', String(settings.perUnitHz));
   next.set('apply', String(settings.applyHz));
   next.set('smooth', settings.smooth ? '1' : '0');
+  next.set('format', settings.format);
   for (const [k, v] of Object.entries(changes)) next.set(k, v);
   location.search = next.toString();
 }
@@ -224,6 +247,7 @@ $<HTMLSelectElement>('hz').onchange = (e) => {
   settings.perUnitHz = generator.perUnitHz = Number((e.target as HTMLSelectElement).value);
   if (adapter instanceof SpikeDeckAdapter) adapter.durationMs = 1000 / settings.perUnitHz;
 };
+$<HTMLSelectElement>('format').onchange = (e) => reloadWith({ format: (e.target as HTMLSelectElement).value });
 $<HTMLInputElement>('paused').onchange = (e) => {
   if ((e.target as HTMLInputElement).checked) generator.stop();
   else generator.start();

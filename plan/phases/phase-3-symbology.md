@@ -38,3 +38,5 @@ Tasarım: [04](../design/04-sync-and-rendering.md#zooma-göre-gösterim-lod)
 Tasarım: [03](../design/03-store.md#canlı-veri-girişi-ingest)
 - [ ] WS + JSON parse + normalize + birleştirme Worker'da
 - [ ] Ana thread'e kare başına tek paket
+- [ ] Tam nesne akışında (karar #10) son durumu Worker tutar ve ana thread'e yalnız **patch** gönderir
+      → içerik karşılaştırması ana thread'den çıkar (ölçüm: tam nesne ≈ 2× kısmi patch, [spike](../spike/findings.md#tam-nesne--kısmi-patch-2026-10-13))
