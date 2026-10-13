@@ -46,8 +46,10 @@ koordinat formatı, harita ayarları). headless-tree yalnız ağaç UI durumunu 
   `store.getFeature(id).geometry.coord[0] = …` yapmaz.
 - Bir varlık değişince store **yeni nesne** üretir (`{ ...eski, ...yama }`); `Map` içindeki
   kayıt yeni nesneyle değiştirilir. Koleksiyon kopyalanmaz.
-- Değişiklik maskesi alanların **referans karşılaştırmasıyla** (`Object.is`) bulunur. Yeni
-  ama içeriği aynı bir `style` nesnesi de "değişti" sayılır (temkinli; adapter'ın diff'i bunu yakalar).
+- Değişiklik maskesi alanların **referans karşılaştırmasıyla** (`Object.is`) bulunur. Ondan önce
+  store, referansı değişmiş ama içeriği aynı alanların eski referansını korur
+  ([en kötü durum](#en-kötü-durum-her-mesajda-tam-nesne)); böylece içeriği aynı yeni bir `style`
+  nesnesi "değişti" sayılmaz. (`diffFeature` tek başına hâlâ yalnız referansa bakar.)
 - `childLayerIds` dizileri ve `selection` kümesi de değişince **yeni referans** olur
   (React `useSyncExternalStore` bunlara güvenir).
 
@@ -364,6 +366,15 @@ değişikliği referansla bulduğu için, içerik aynı olsa bile her alan "değ
 konumu değişen 50k birlik için ikon/stil de değişmiş görünür ve adapter her flush'ta hepsini
 yeniden hesaplar.
 
-Çözüm (Faz 1.0): upsert yolunda referans farklıysa **değer karşılaştırması** yapılır; içerik
-aynıysa eski referans korunur. Hızlı yol (aynı referans) aynen kalır; değer karşılaştırması
-yalnız referans farklı olduğunda çalışır. Maliyet ölçülüp kısmi patch ile karşılaştırılır.
+Çözüm (Faz 1.0, kod: `store/stabilize.ts`): store'un "değiştir" noktalarında (unsur, katman,
+altlık) referansı farklı alanların **içeriği** karşılaştırılır (`deepEqual`: ilkel, dizi, düz nesne);
+içerik aynıysa eski referans korunur, sonra maske referansla hesaplanır. Böylece:
+
+- tam nesne upsert'i, kısmi patch ve snapshot (`replaceLayerContents`) aynı yoldan geçer;
+- yalnız konumu değişen birlikte günlükte yalnız `GEOMETRY` vardır (`props`/`style` eski referans);
+- hiçbir şey değişmediyse store eski nesneyi korur, abone uyanmaz;
+- altlıkta aynı içerikli yeni `source` → `SOURCE` biti yok (adapter tile kaynağını baştan yüklemez);
+- hızlı yol (aynı referans) aynen kalır; içerik karşılaştırması yalnız referans farklı alanlarda çalışır.
+
+Düz olmayan nesneler (Date, typed array, sınıf örnekleri) yalnız referansla eşit sayılır.
+Ölçüm adımı atlandı (kullanıcı kararı); maliyet Faz 1.5'te tarayıcıda görülecek.

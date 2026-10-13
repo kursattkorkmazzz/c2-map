@@ -24,6 +24,7 @@ import {
   type FeaturePatch,
   type LayerPatch,
 } from "./diff";
+import { stabilizeBasemap, stabilizeFeature, stabilizeLayer } from "./stabilize";
 
 // ── Genel API ────────────────────────────────────────────────────
 
@@ -576,10 +577,12 @@ class MapStoreImpl implements MapStore {
   }
 
   /** Var olan unsuru yenisiyle değiştirir; değişiklik yoksa yalnız zaman ve `rev` ilerler. */
-  private replaceFeature(prev: Feature, next: Feature, rev: number | undefined): void {
+  private replaceFeature(prev: Feature, incoming: Feature, rev: number | undefined): void {
     // Aynı içerikteki mesaj da unsurun "taze" olduğunu gösterir (bayatlık için).
-    this.touch(next.id, rev);
+    this.touch(incoming.id, rev);
 
+    // Tam nesne akışı: içeriği aynı kalan alanların eski referansı korunur (gereksiz bit yok).
+    const next = stabilizeFeature(prev, incoming);
     const mask = diffFeature(prev, next);
     if (mask === 0) return; // eski referans kalır → React yeniden çizmez, harita güncellenmez
 
@@ -634,7 +637,8 @@ class MapStoreImpl implements MapStore {
   }
 
   /** Var olan katmanı yenisiyle değiştirir; ebeveyn değiştiyse yeni ebeveynin sonuna taşır. */
-  private replaceLayer(prev: Layer, next: Layer): void {
+  private replaceLayer(prev: Layer, incoming: Layer): void {
+    const next = stabilizeLayer(prev, incoming);
     const parentChanged = prev.parentId !== next.parentId;
     if (parentChanged) this.assertNoCycle(next.id, next.parentId);
 
@@ -742,7 +746,8 @@ class MapStoreImpl implements MapStore {
     this.replaceBasemap(prev, mergeBasemapPatch(prev, patch));
   }
 
-  private replaceBasemap(prev: Basemap, next: Basemap): void {
+  private replaceBasemap(prev: Basemap, incoming: Basemap): void {
+    const next = stabilizeBasemap(prev, incoming);
     const mask = diffBasemap(prev, next);
     if (mask === 0) return;
 

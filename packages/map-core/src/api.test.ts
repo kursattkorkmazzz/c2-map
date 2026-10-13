@@ -57,6 +57,8 @@ describe("@c2/map-core genel API", () => {
       "diffFeature",
       "mergeFeaturePatch",
       "shallowMerge",
+      "deepEqual",
+      "stabilizeFeature",
       "Registry",
       "LayerResolver",
     ]) {
