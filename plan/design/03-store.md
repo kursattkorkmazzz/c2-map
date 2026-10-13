@@ -356,6 +356,27 @@ React binding'i: `useSyncExternalStore(cb => store.subscribeFeature(id, cb), () 
 - **Worker (Faz 3):** WS bağlantısı + JSON parse + normalize + birleştirme bir Web Worker'da;
   ana thread'e kare başına tek paket gelir. Ingest API batch odaklı olduğu için sözleşme değişmez.
 
+### Akış yardımcısı: `createLayerStream` (kod: `src/ingest/`)
+
+```ts
+const units = createLayerStream<BackendUnit>(store, {
+  layerId: "birlikler",
+  format: STREAM_FORMAT.FULL,          // varsayılan; kısmi patch için STREAM_FORMAT.PATCH
+  normalize: (m) => m.deleted ? { id: m.uid, removed: true }
+                              : { id: m.uid, kind: "milsym", geometry: …, props: { sidc: m.code } },
+});
+socket.onmessage = (e) => units.update(JSON.parse(e.data).items);   // bir paket = bir transaction
+socket.onreconnect = (all) => units.snapshot(all);                   // replaceLayerContents
+```
+
+- **Format mesajdan tahmin edilmez**, akış bazında verilir (çağrı bazında da değiştirilebilir).
+  Tam nesnede eksik alan "yok", patch'te "değişmedi" demektir; yanlış tahmin veri kaybıdır.
+- Tam nesnede `layerId` verilmezse akışın katmanı kullanılır; başka katmanı gösteren nesne
+  atlanır (`stats.wrongLayer`). Patch'ler store'a olduğu gibi gider.
+- `normalize` `null` dönerse mesaj atlanır (`stats.skipped`; ör. heartbeat); `{ id, removed: true }` siler.
+- Paket içindeki karışık işlemler (ekle / güncelle / sil) **sırayla** uygulanır; ardışık aynı tür
+  öğeler tek store çağrısında gruplanır.
+
 ### En kötü durum: her mesajda tam nesne
 
 Backend'in mesaj formatı belli değil (karar #10); iki format da desteklenir ve **en kötü durum

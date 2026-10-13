@@ -17,7 +17,7 @@ hem kısmi patch hem tam nesne akışı çalışıyor; yük üreteci ve ölçüm
 Tasarım: [03](../design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne)
 - [x] ~~**Ölç:** tam nesne akışının düzeltme öncesi maliyeti~~ — atlandı (karar: doğrudan düzeltmeye geçildi)
 - [x] **Değer karşılaştırması** (`store/stabilize.ts`): referans farklı ama içerik aynıysa eski referans korunur (geometri, `style` / `props` / `meta`; katmanda `meta`, altlıkta `source`) → maskede gereksiz bit yok, adapter ikon/stil ve tile kaynağını yeniden hesaplamaz. Tam nesne, kısmi patch ve snapshot aynı yoldan. Testler: `stabilize.test.ts`, `map-store.full-object.test.ts` (uçtan uca MapSync dahil)
-- [ ] **Akış yardımcısı:** aynı girişten kısmi patch (`{ id, …değişenler }`) ve tam nesne kabul eden ingest katmanı; yeniden bağlanmada `replaceLayerContents`
+- [x] **Akış yardımcısı** (`createLayerStream`, `src/ingest/`): katman başına akış; format akış bazında **açıkça** (`full` varsayılan / `patch`, çağrı bazında da değiştirilebilir — mesajdan tahmin edilmez); `normalize` ile backend biçimi → model (null = atla, `{ id, removed: true }` = sil); bir paket = tek transaction, sıra korunur; `snapshot()` → `replaceLayerContents`; sayaçlar (`received` / `skipped` / `wrongLayer`). Testler: `layer-stream.test.ts`
 - [ ] **Yeniden ölç:** Node bench + `core.html`'e "tam nesne" akış modu; kısmi patch ile karşılaştır
 
 ## 1.1 `@c2/map-maplibre` — temel adapter

@@ -45,6 +45,9 @@ describe("@c2/map-core genel API", () => {
         "createFrameScheduler",
         "createManualScheduler",
         "runStages",
+        // ingest
+        "STREAM_FORMAT",
+        "createLayerStream",
       ].sort(),
     );
   });
