@@ -13,7 +13,9 @@ hem kısmi patch hem tam nesne akışı çalışıyor; yük üreteci ve ölçüm
 - [x] #11 Güncelleme frekansı → birlik başına ≤ 1 Hz, haritaya uygulama tavanı 10 Hz
 - [x] #14 Unsurlar LayerTree'de mi? → LayerTree ayrı faz ([1.6](phase-1.6-layer-tree.md)), karar orada
 
-## 1.0 Akış girişi: tam nesne (en kötü durum) ve kısmi patch — ✅
+## 1.0 Akış girişi: tam nesne (en kötü durum) ve kısmi patch
+
+Durum: ✅
 Tasarım: [03](../design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne)
 - [x] ~~**Ölç:** tam nesne akışının düzeltme öncesi maliyeti~~ — atlandı (karar: doğrudan düzeltmeye geçildi)
 - [x] **Değer karşılaştırması** (`store/stabilize.ts`): referans farklı ama içerik aynıysa eski referans korunur (geometri, `style` / `props` / `meta`; katmanda `meta`, altlıkta `source`) → maskede gereksiz bit yok, adapter ikon/stil ve tile kaynağını yeniden hesaplamaz. Tam nesne, kısmi patch ve snapshot aynı yoldan. Testler: `stabilize.test.ts`, `map-store.full-object.test.ts` (uçtan uca MapSync dahil)
