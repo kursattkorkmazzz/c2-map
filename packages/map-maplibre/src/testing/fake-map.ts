@@ -95,6 +95,22 @@ export class FakeMap implements MapLike {
     if (at >= 0) this.layers.splice(at, 1);
   }
 
+  setPaintProperty(layerId: string, name: string, value: unknown): void {
+    const layer = this.requireLayer(layerId) as { paint?: Record<string, unknown> };
+    layer.paint = { ...layer.paint, [name]: value };
+  }
+
+  setLayoutProperty(layerId: string, name: string, value: unknown): void {
+    const layer = this.requireLayer(layerId) as { layout?: Record<string, unknown> };
+    layer.layout = { ...layer.layout, [name]: value };
+  }
+
+  private requireLayer(id: string): LayerSpecification {
+    const layer = this.getLayer(id);
+    if (!layer) throw new Error(`Katman yok: ${id}`);
+    return layer;
+  }
+
   /** Katman id'leri çizim sırasıyla (alttan üste). */
   layerOrder(): string[] {
     return this.layers.map((l) => l.id);

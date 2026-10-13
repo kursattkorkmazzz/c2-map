@@ -9,6 +9,7 @@ export {
   type MaplibreAdapterStats,
   type ResolvedImage,
 } from './adapter';
+export { SUPPORTED_BASEMAP_SOURCES, toSourceSpec, type BasemapStats } from './basemaps';
 export { STANDARD_PROPS, type EncodedPart, type PropertyValue } from './encode';
 export { circleRing, representativePoint, toGeoJSONGeometry } from './geometry';
 export type { GeoJSONSourceLike, MapImage, MapLike } from './map-like';

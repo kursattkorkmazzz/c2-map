@@ -29,7 +29,7 @@ import { buildSidc, ECHELONS, ENTITIES, IDENTITIES, SymbolCache } from '../symbo
 import { SpikeDeckAdapter } from './deck-adapter';
 import { createMaplibreAdapter, markerRenderer } from '@c2/map-maplibre';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { SPIKE_STYLE } from '../map';
+import { BASEMAPS, ORTOFOTO_ID } from './basemaps';
 
 const ENGINE = { MAPLIBRE: 'maplibre', DECK: 'deck' } as const;
 type Engine = (typeof ENGINE)[keyof typeof ENGINE];
@@ -63,7 +63,7 @@ const adapter =
   settings.engine === ENGINE.DECK
     ? new SpikeDeckAdapter(symbols, () => stats.mapRendered())
     : createMaplibreAdapter({
-        style: SPIKE_STYLE,
+        // Stil yalnız arka plan; altlıklar store'dan gelir (Faz 1.2).
         workerUrl,
         renderers: {
           milsym: markerRenderer({ icon: (f) => (f.props as { sidc?: string } | undefined)?.sidc }),
@@ -160,9 +160,10 @@ function resetUnits(): void {
   );
 }
 
-store.transaction((tx) =>
-  tx.upsertLayers([{ id: LAYER_ID, name: 'Birlikler', parentId: null, visible: true, opacity: 1, renderGroup: true }]),
-);
+store.transaction((tx) => {
+  tx.upsertLayers([{ id: LAYER_ID, name: 'Birlikler', parentId: null, visible: true, opacity: 1, renderGroup: true }]);
+  tx.upsertBasemaps(BASEMAPS); // deck.gl modunda spike adapter'ı altlıkları yok sayar (kendi stilini kullanır)
+});
 resetUnits();
 generator.start();
 
@@ -232,6 +233,15 @@ panel.innerHTML = `
   <label ${settings.engine === ENGINE.DECK ? '' : 'style="display:none"'}>Akıcı hareket
     <input type="checkbox" id="smooth" ${settings.smooth ? 'checked' : ''} />
   </label>
+  <div ${settings.engine === ENGINE.MAPLIBRE ? '' : 'style="display:none"'}>
+    <label>Altlık
+      <select id="basemap">${BASEMAPS.filter((b) => b.id !== ORTOFOTO_ID)
+        .map((b) => option(b.id, b.name, BASEMAPS.find((x) => x.visible && x.id !== ORTOFOTO_ID)?.id ?? ''))
+        .join('')}</select>
+    </label>
+    <label>Altlık opaklığı <input type="range" id="basemap-opacity" min="0" max="1" step="0.05" value="0.6" /></label>
+    <label>Ortofoto (IMAGE) <input type="checkbox" id="ortofoto" /></label>
+  </div>
   <label>Akışı durdur <input type="checkbox" id="paused" /></label>
   <table id="stats"></table>
   <div class="selected" id="selected"></div>
@@ -264,6 +274,17 @@ $<HTMLSelectElement>('hz').onchange = (e) => {
   if (adapter instanceof SpikeDeckAdapter) adapter.durationMs = 1000 / settings.perUnitHz;
 };
 $<HTMLSelectElement>('format').onchange = (e) => reloadWith({ format: (e.target as HTMLSelectElement).value });
+// Altlıklar store üzerinden: radyo davranışını store'un exclusiveGroup kuralı sağlar.
+$<HTMLSelectElement>('basemap').onchange = (e) =>
+  store.transaction((tx) => tx.patchBasemap((e.target as HTMLSelectElement).value, { visible: true }));
+$<HTMLInputElement>('basemap-opacity').oninput = (e) => {
+  const opacity = Number((e.target as HTMLInputElement).value);
+  store.transaction((tx) => {
+    for (const b of store.getBasemaps()) if (b.exclusiveGroup) tx.patchBasemap(b.id, { opacity });
+  });
+};
+$<HTMLInputElement>('ortofoto').onchange = (e) =>
+  store.transaction((tx) => tx.patchBasemap(ORTOFOTO_ID, { visible: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('paused').onchange = (e) => {
   if ((e.target as HTMLInputElement).checked) generator.stop();
   else generator.start();

@@ -2,6 +2,7 @@
 // Tasarım: plan/design/04-sync-and-rendering.md#maplibre-render-group, plan/design/05-adapter-and-events.md
 //
 //   applyBatch(batch)
+//     altlıklar → kaynak + raster katmanı, çapanın altında `order`'a göre (basemaps.ts)
 //     gruplar   → render group başına bir GeoJSON kaynağı (promoteId: '_id'); gruplar arası sıra korunur
 //     unsurlar  → kind renderer'ı encode eder → önceki encode ile fark → kaynak başına TEK updateData
 //     durum     → setFeatureState (veriye dokunmaz)
@@ -32,6 +33,7 @@ import {
   type RenderGroup,
 } from '@c2/map-core';
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
+import { BasemapController, SUPPORTED_BASEMAP_SOURCES, type BasemapStats } from './basemaps';
 import { partId, SourceDiffBuilder, STANDARD_PROPS, diffPart, type StoredPart } from './encode';
 import type { MapImage, MapLike, GeoJSONSourceLike } from './map-like';
 import { defaultMarkerRenderer } from './renderers/marker';
@@ -50,6 +52,8 @@ export type MapInit = {
   bearing: number;
   pitch: number;
   workerUrl?: string;
+  /** Her ağ isteği için (tile, stil…): altlık sağlayıcısının auth header / imzalı URL dönüşümü. */
+  transformRequest: (url: string) => { url: string; headers?: Record<string, string> } | undefined;
 };
 
 export type MaplibreAdapterOptions = {
@@ -68,7 +72,7 @@ export type MaplibreAdapterOptions = {
   createMap?: (container: HTMLElement, init: MapInit) => Promise<MapLike>;
 };
 
-export type MaplibreAdapterStats = {
+export type MaplibreAdapterStats = BasemapStats & {
   /** Renderer'ı olmayan ve fallback ile de çözülemeyen (çizilmeyen) unsur güncellemeleri. */
   readonly skippedUnsupported: number;
 };
@@ -102,6 +106,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   lastSent = 0;
 
   private map: MapLike | null = null;
+  private basemaps: BasemapController | null = null;
   private events: MapEventSink | null = null;
   private kinds: FeatureKindRegistry | null = null;
   private pixelRatio = 1;
@@ -125,12 +130,12 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       draw: false,
       featureState: true,
       supportedFeatureKinds: [...this.renderers.keys()],
-      supportedBasemapSources: [], // Faz 1.2
+      supportedBasemapSources: SUPPORTED_BASEMAP_SOURCES,
     };
   }
 
   get stats(): MaplibreAdapterStats {
-    return { ...this.mutableStats };
+    return { ...this.mutableStats, skippedBasemaps: this.basemaps?.stats.skippedBasemaps ?? 0 };
   }
 
   // ── Yaşam döngüsü ──────────────────────────────────────────────
@@ -150,10 +155,13 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       bearing: view.bearingDeg ?? 0,
       pitch: view.pitchDeg ?? 0,
       workerUrl: this.options.workerUrl,
+      // Harita kurulurken verilir ama altlıklar sonradan gelir → o anki altlık listesine bakar.
+      transformRequest: (url) => this.basemaps?.transformRequest(url),
     });
     this.map = map;
 
     map.addLayer({ id: BASEMAP_ANCHOR_LAYER, type: 'background', layout: { visibility: 'none' } });
+    this.basemaps = new BasemapController(map, options.basemapProviders, BASEMAP_ANCHOR_LAYER);
 
     const resolveImage = this.options.resolveImage;
     if (resolveImage) {
@@ -176,6 +184,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     for (const detach of this.detachers.splice(0)) detach();
     this.map?.remove();
     this.map = null;
+    this.basemaps = null;
     this.events = null;
     this.groups.clear();
     this.features.clear();
@@ -243,6 +252,10 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
 
   applyBatch(batch: RenderBatch): void {
     const map = this.requireMap();
+
+    // 0) Altlıklar (çapanın altında; operasyonel katmanlardan bağımsız)
+    for (const id of batch.basemaps?.remove ?? []) this.basemaps!.remove(id);
+    for (const basemap of batch.basemaps?.upsert ?? []) this.basemaps!.upsert(basemap);
 
     // 1) Gruplar (önce: unsurlar gruplarının kaynağına yazılacak)
     let reorder = false;
@@ -531,6 +544,7 @@ async function createDefaultMap(container: HTMLElement, init: MapInit): Promise<
     zoom: init.zoom,
     bearing: init.bearing,
     pitch: init.pitch,
+    transformRequest: (url) => init.transformRequest(url),
   });
   await new Promise<void>((resolve) => map.once('load', () => resolve()));
   return map as unknown as MapLike;

@@ -44,10 +44,14 @@ Durum: ✅ (kod: `packages/map-maplibre/`, 35 test; gerçek tarayıcıda `core.h
 
 ## 1.2 Altlıklar
 Tasarım: [02](../design/02-core-model.md#altlıklar-basemap)
-- [ ] XYZ / WMTS / WMS / TILEJSON → raster source + layer
-- [ ] IMAGE (4 köşe) → image source
-- [ ] `basemap-top` anchor; sıra ve opaklık
-- [ ] `BasemapProvider.transformRequest` (auth header)
+Durum: ✅ (kod: `packages/map-maplibre/src/basemaps.ts`, 16 test; gerçek servislerle `core.html?engine=maplibre`)
+- [x] XYZ / WMTS / WMS / TILEJSON → raster source + layer (WMS: EPSG:3857 `{bbox-epsg-3857}`; WMTS: KVP veya REST şablonu)
+- [x] IMAGE (4 köşe) → image source
+- [x] `basemap-top` anchor altında, `order`'a göre; opaklık / görünürlük yerinde (`setPaintProperty` / `setLayoutProperty`), sıra `moveLayer`, kaynak değişince baştan
+- [x] `BasemapProvider.transformRequest` (auth header): istek URL'si önek eşlemesiyle altlığa → sağlayıcısına
+- [x] `custom:*` kaynaklar `BasemapProviderRegistry.resolveSource` ile; çözülemeyen / desteklenmeyen → çizilmez + `stats.skippedBasemaps`
+- [ ] VECTOR_STYLE (vektör stil altlığı) → Faz 4.3 (stil birleştirme)
+- Tarayıcı doğrulaması: OSM, OpenTopoMap, Esri World Imagery (XYZ), terrestris (WMS) ve üretilmiş görüntü (IMAGE); tüm tile istekleri 200, `exclusiveGroup` radyo davranışı ve opaklık panelden store üzerinden
 
 ## 1.3 deck.gl renderer'ı (canlı birlikler)
 Tasarım: [04](../design/04-sync-and-rendering.md#deckgl-yolu)

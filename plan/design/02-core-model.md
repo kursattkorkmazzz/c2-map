@@ -172,6 +172,23 @@ IMAGE → `image` source; VECTOR_STYLE → style'ın source/layer'ları id önek
 Tüm altlık style layer'ları `basemap-top` adlı boş bir _anchor_ layer'ın altına eklenir;
 operasyonel katmanlar her zaman üstte kalır.
 
+Uygulama ayrıntıları (kod: `packages/map-maplibre/src/basemaps.ts`):
+
+- Her altlık = `c2-bm-src-<id>` kaynağı + `c2-bm-<id>` raster katmanı; `order`'ı daha büyük ilk altlığın
+  altına (yoksa çapanın altına) eklenir.
+- Değişiklikler en ucuz yoldan: opaklık → `raster-opacity`, görünürlük → `visibility` (gizli katman tile
+  istemez; silinmez, yeniden açmak anında), sıra → `moveLayer`. Kaynak (veya attribution) değişince kaynak +
+  katman baştan kurulur — çekirdek içeriği aynı `source`'un referansını koruduğu için bu yalnız gerçek
+  değişiklikte olur.
+- **WMS:** `VERSION=1.3.0`, `CRS=EPSG:3857`, 256 px karolar, `TRANSPARENT=true`, `BBOX={bbox-epsg-3857}`;
+  `params` ek sorgu parametreleri olarak eklenir.
+- **WMTS:** URL `{z}` içeriyorsa REST şablonu olarak aynen; yoksa KVP `GetTile` şablonu kurulur ve
+  `TILEMATRIX = zoom` varsayılır (GoogleMapsCompatible / WebMercatorQuad). Farklı matris kümeleri için
+  sağlayıcı (`custom:*` + `resolve`) ile REST şablonu verilmelidir.
+- **Auth / imzalı URL:** MapLibre'nin `transformRequest`'i harita kurulurken bir kez verilir; adapter her
+  isteğin URL'sini altlıkların URL önekleriyle eşleyip o altlığın sağlayıcısının `transformRequest`'ine iletir
+  (en uzun önek kazanır; sağlayıcısı olmayan altlıkta istek değişmez).
+
 ## Kamera
 
 ```ts

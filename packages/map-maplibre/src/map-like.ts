@@ -26,6 +26,8 @@ export interface MapLike {
   getLayer(id: string): unknown;
   moveLayer(id: string, beforeId?: string): unknown;
   removeLayer(id: string): unknown;
+  setPaintProperty(layerId: string, name: string, value: unknown): unknown;
+  setLayoutProperty(layerId: string, name: string, value: unknown): unknown;
 
   // Durum ve sorgu
   setFeatureState(feature: FeatureIdentifier, state: Record<string, unknown>): unknown;
