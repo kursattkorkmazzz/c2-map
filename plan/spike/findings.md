@@ -127,6 +127,37 @@ Ortam: headless Edge, gerçek GPU (Intel UHD), 1400×900.
 6. Yan bulgu: hover/seçim halkası katmanında yarıçap 0 olsa da çerçeve çiziliyordu (her birlikte nokta);
    `circle-stroke-opacity` ile düzeltildi (eski spike sayfasında da).
 
+## Gerçek MapLibre adapter'ı (Faz 1.1, 2026-10-13)
+
+`core.html?engine=maplibre` artık spike taslağı yerine gerçek `@c2/map-maplibre` paketiyle çalışıyor
+(birlikler `marker` renderer'ıyla, ikon = SIDC, görüntü `resolveImage` ile tembel).
+
+**Bulunan sorun: veri güdümlü `icon-size`.** İlk sürümde marker ikon boyutu unsur başına okunuyordu
+(`'icon-size': ['get', '_size']`). Sonuç: 1k birlikte bile sayfa ~120 kareyle başlayıp birkaç saniyede
+**1–2 kareye** düşüyordu; ana thread boştaydı (darboğaz MapLibre'nin yerleşim/GPU tarafı). Temiz sayfa
+deneyleriyle (her seferinde tek özellik kapatılarak) tek suçlunun `icon-size` olduğu bulundu:
+
+| Kapatılan özellik (10k) | FPS (t+3 → t+9 sn) |
+|---|---|
+| hiçbiri | 119 → 9 → 1 |
+| seçim halkası katmanı | 77 → 2 → 1 |
+| `symbol-sort-key` | 31 → 1 → 0 |
+| `icon-rotate` + hizalama | 121 → 6 → 1 |
+| `icon-opacity` ifadesi | 55 → 2 → 0 |
+| **`icon-size` (sabit)** | **71 → 81 → 91** |
+
+Kural (koda ve teste işlendi): **ikon boyutu katman sabiti**, unsur başına değil. Daire yarıçapı gibi
+diğer veri güdümlü değerlerde sorun görülmedi.
+
+Düzeltme sonrası (gerçek GPU, headless Edge):
+
+| Senaryo | FPS (sayfa) | Harita çizimi / sn | En uzun kare | Long task | Çekirdek + besleme işi |
+|---|---|---|---|---|---|
+| 10k, tam nesne | 88 | 21 | 42 ms | 0 | 34 ms/sn |
+| 10k, kısmi patch | 92 | 19 | 33 ms | 0 | 38 ms/sn |
+| 3k, tam nesne, z 9 | 101 | 101 | 25 ms | 0 | 15 ms/sn |
+| (eski spike, mod 3, 10k) | 76 | — | — | — | — |
+
 ## Tam nesne ↔ kısmi patch (2026-10-13)
 
 Karar #10: backend her mesajda birliğin tamamını gönderebilir (en kötü durum). Store, referansı

@@ -9,7 +9,8 @@ export const UNITS_SOURCE = 'units';
 export const UNITS_ICON_LAYER = 'units-icon';
 const UNITS_HALO_LAYER = 'units-halo';
 
-const style: StyleSpecification = {
+/** Spike stili: koyu arka plan + soluk OSM raster (altlıklar Faz 1.2'de store'dan gelecek). */
+export const SPIKE_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     osm: {
@@ -33,7 +34,7 @@ export function createMap(
 ): Promise<MaplibreMap> {
   const map = new MaplibreMap({
     container,
-    style,
+    style: SPIKE_STYLE,
     center: [32.85, 39.9],
     zoom: 6.5,
   });

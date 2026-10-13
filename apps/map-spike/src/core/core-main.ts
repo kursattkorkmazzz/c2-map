@@ -27,7 +27,9 @@ import { UnitGenerator, type UnitMessage } from '../generator';
 import { Stats } from '../stats';
 import { buildSidc, ECHELONS, ENTITIES, IDENTITIES, SymbolCache } from '../symbology';
 import { SpikeDeckAdapter } from './deck-adapter';
-import { SpikeMaplibreAdapter } from './maplibre-adapter';
+import { createMaplibreAdapter, markerRenderer } from '@c2/map-maplibre';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import { SPIKE_STYLE } from '../map';
 
 const ENGINE = { MAPLIBRE: 'maplibre', DECK: 'deck' } as const;
 type Engine = (typeof ENGINE)[keyof typeof ENGINE];
@@ -55,10 +57,23 @@ const symbols = new SymbolCache();
 const store = createMapStore();
 const router = new EventRouter(store);
 
+// MapLibre modu artık gerçek paket: @c2/map-maplibre. Birlikler `marker` renderer'ıyla çizilir;
+// ikon id'si SIDC, görüntü `resolveImage` ile sembol önbelleğinden tembel üretilir.
 const adapter =
   settings.engine === ENGINE.DECK
     ? new SpikeDeckAdapter(symbols, () => stats.mapRendered())
-    : new SpikeMaplibreAdapter(symbols, () => stats.mapRendered());
+    : createMaplibreAdapter({
+        style: SPIKE_STYLE,
+        workerUrl,
+        renderers: {
+          milsym: markerRenderer({ icon: (f) => (f.props as { sidc?: string } | undefined)?.sidc }),
+        },
+        resolveImage: (sidc) => {
+          const img = symbols.get(sidc);
+          const ctx = img.canvas.getContext('2d')!;
+          return { image: ctx.getImageData(0, 0, img.canvas.width, img.canvas.height), pixelRatio: img.pixelRatio };
+        },
+      });
 if (adapter instanceof SpikeDeckAdapter) {
   adapter.smooth = settings.smooth;
   adapter.durationMs = 1000 / settings.perUnitHz;
@@ -71,7 +86,8 @@ await adapter.mount(document.getElementById('map')!, {
   symbology: new SymbologyRegistry(),
   basemapProviders: new BasemapProviderRegistry(),
 });
-
+// Ölçüm paneli: harita çizim sayacı motorun kendisinden (kaçış kapısı `getEngine`).
+if (!(adapter instanceof SpikeDeckAdapter)) adapter.getEngine().on('render', () => stats.mapRendered());
 /** MapSync'in flush'larını ölçen zamanlayıcı sarmalayıcısı. */
 function timedScheduler(inner: Scheduler): Scheduler {
   return {

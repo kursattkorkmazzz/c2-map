@@ -114,6 +114,21 @@ Paint: `['case', ['boolean', ['feature-state', 'selected'], false], seçiliRenk,
   edilen id ile çalışır (spike'ta doğrulandı).
 - Halka katmanında yarıçap 0 olsa da `circle-stroke` çizilir → seçili/hover dışındakilerde
   `circle-stroke-opacity: 0` verilmeli (aksi halde her birlikte nokta ve gereksiz çizim).
+- **`icon-size` veri güdümlü olmamalı** (katman sabiti): unsur başına `['get', …]` sık güncellenen
+  kaynakta kare hızını birkaç saniyede 1–2 FPS'e düşürüyor
+  ([ölçüm](../spike/findings.md#gerçek-maplibre-adapterı-faz-11-2026-10-13)). Farklı ikon boyutları
+  gerekiyorsa ayrı kind / renderer kullanılır.
+
+### Uygulama ayrıntıları (kod: `packages/map-maplibre/`)
+
+- Her render group → bir GeoJSON kaynağı (`c2-src-<grup>`, `promoteId: '_id'`). Kaynağı birden fazla
+  kind paylaşır; her kind'ın katmanları `_kind` ile süzer. Bir kind'ın katmanları, o kind grupta ilk
+  kez görününce eklenir: grubun mevcut katmanlarının hemen üstüne (sonraki grubun ilk katmanının altına).
+- Grup sırası değişince grupların katmanları `order`'a göre baştan dizilir (grup sayısı azdır).
+- Unsurun grubu veya çizen kind'ı değişirse eski parçalar eski kaynaktan silinip yenisine eklenir.
+- Adapter, MapLibre'ye doğrudan değil `MapLike` arayüzüne bağlıdır; `maplibre-gl` yalnız `mount`'ta
+  dinamik import edilir. Testler `FakeMap` ile Node'da koşar; gerçek tarayıcı doğrulaması spike'ta.
+- Worker URL'si seçenektir (`workerUrl`); kütüphane paketleyiciye özel import yapmaz.
 
 ### Composite
 

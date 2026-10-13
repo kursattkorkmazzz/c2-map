@@ -27,14 +27,20 @@ Tasarım: [03](../design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne)
 
 ## 1.1 `@c2/map-maplibre` — temel adapter
 Tasarım: [05](../design/05-adapter-and-events.md), [04](../design/04-sync-and-rendering.md#maplibre-render-group)
-- [ ] Paket iskeleti; MapLibre 6 worker URL kurulumu ([spike notu](../spike/findings.md#uyumluluk-notları))
-- [ ] `mount` / `unmount` / `resize` / kamera metodları
-- [ ] `applyBatch`: render group başına GeoJSON source, kind'lerin style layer'ları
-- [ ] Encode + önceki encode ile diff → `updateData`
-- [ ] Efektif opaklık (`_op`) ve sıra (`_z`)
-- [ ] Hover / seçim → `feature-state`
-- [ ] Hit-test → `MapEventSink`
-- [ ] `vector` ve `marker` kind renderer'ları
+Durum: ✅ (kod: `packages/map-maplibre/`, 35 test; gerçek tarayıcıda `core.html?engine=maplibre`)
+- [x] Paket iskeleti; worker URL **seçenek** olarak (`workerUrl`) — kütüphane Vite'a özel `?url` importu yapamaz ([spike notu](../spike/findings.md#uyumluluk-notları))
+- [x] `mount` / `unmount` / `resize` / kamera metodları; `maplibre-gl` yalnız `mount`'ta dinamik import (Node testleri WebGL yüklemez)
+- [x] `MapLike` arayüzü + test için `FakeMap` (kaynak içeriği, katman sırası, feature-state, olaylar)
+- [x] `applyBatch`: render group başına GeoJSON source (`promoteId: '_id'`), kind ilk görününce katmanları; gruplar arası sıra (ekleme konumu + `restack`)
+- [x] Encode + önceki encode ile diff → kaynak başına **tek** `updateData` (konum-only = yalnız `newGeometry`)
+- [x] Standart alanlar: `_id`, `_fid`, `_op` (efektif opaklık), `_z` (sıra), `_kind` (çizen renderer)
+- [x] Hover / seçim → `feature-state` (unsurun tüm parçalarına)
+- [x] Hit-test → `MapEventSink` (etkileşimsiz katmanlar `metadata: NON_INTERACTIVE` ile hariç); click / dblclick / contextmenu / hover enter-leave / pointermove / viewchange
+- [x] `vector` (dolgu + çerçeve + nokta; daire jeodezik poligon) ve `marker` (ikon veya daire + seçim halkası) renderer'ları
+- [x] Desteklenmeyen kind → çekirdeğin fallback zinciri (`FeatureKindRegistry.resolveFor`), yoksa çizilmez + sayaç
+- [x] İkon çözümleyici seçeneği (`resolveImage`): senkron sonuç senkron eklenir
+- [x] **Performans kuralı:** marker'da `icon-size` veri güdümlü değil (katman sabiti) — 10k'da FPS'i 1–2'ye düşürüyordu ([findings](../spike/findings.md#gerçek-maplibre-adapterı-faz-11-2026-10-13))
+- [ ] (Sonraya) `ImageAtlas` ref-count + LRU (Faz 3 sembolojiyle); katmanın `interactive: false` bilgisinin adapter'a taşınması
 
 ## 1.2 Altlıklar
 Tasarım: [02](../design/02-core-model.md#altlıklar-basemap)

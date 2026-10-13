@@ -8,6 +8,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-13 | MapLibre'de ikon boyutu (`icon-size`) **katman sabiti**; unsur başına veri güdümlü değil | Tarayıcı ölçümü: veri güdümlü `icon-size` 10k'da FPS'i ~120'den 1–2'ye düşürdü | [04](design/04-sync-and-rendering.md#hover--seçim--bayatlık--feature-state), [findings](spike/findings.md#gerçek-maplibre-adapterı-faz-11-2026-10-13) |
 | 2026-10-13 | **#10 Mesaj formatı:** kısmi patch ve tam nesne **ikisi de** desteklenir; **en kötü durum (her mesajda tam nesne) esas alınır**, değişikliği çekirdek bulur | Backend formatı belli değil; en kötü durumda da çalışmalı | [03](design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne), [Faz 1.0](phases/phase-1-2d-mvp.md#10-akış-girişi-tam-nesne-en-kötü-durum-ve-kısmi-patch) |
 | 2026-10-13 | **#11 Frekans:** birlik başına ≤ 1 Hz, haritaya uygulama tavanı 10 Hz | Ölçümler bu senaryoda rahat | [spike](spike/findings.md) |
 | 2026-10-13 | **LayerTree ayrı faz (1.6)**; #14 (unsurlar ağaçta mı) orada detaylandırılacak | Kapsamı ayrıca konuşulacak | [phase-1.6](phases/phase-1.6-layer-tree.md) |
