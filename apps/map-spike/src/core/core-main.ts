@@ -1,7 +1,7 @@
 // core.html: spike'ın yük üreteci + gerçek @c2/map-core boru hattı.
 //   üreteç → store.transaction → MapSync (kare başına tek flush) → adapter (MapLibre | deck.gl)
 //   adapter hit-test → EventRouter → store (seçim / hover) → MapSync → adapter (feature-state)
-// URL: ?engine=deck|maplibre&format=full|patch&n=10000&hz=1&apply=10&smooth=0&z=9
+// URL: ?engine=deck|maplibre&format=full|patch&n=10000&hz=1&apply=10&motion=off|on|auto&z=9
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../style.css';
@@ -26,8 +26,7 @@ import {
 import { UnitGenerator, type UnitMessage } from '../generator';
 import { Stats } from '../stats';
 import { buildSidc, ECHELONS, ENTITIES, IDENTITIES, SymbolCache } from '../symbology';
-import { SpikeDeckAdapter } from './deck-adapter';
-import { createMaplibreAdapter, markerRenderer } from '@c2/map-maplibre';
+import { createMaplibreAdapter, markerRenderer, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { BASEMAPS, ORTOFOTO_ID } from './basemaps';
 
@@ -44,7 +43,9 @@ const settings = {
   count: Number(params.get('n') ?? 10000),
   perUnitHz: Number(params.get('hz') ?? 1),
   applyHz: Number(params.get('apply') ?? 10),
-  smooth: params.get('smooth') !== '0',
+  motion: (Object.values(MOTION_MODE) as string[]).includes(params.get('motion') ?? '')
+    ? (params.get('motion') as MotionMode)
+    : MOTION_MODE.AUTO,
   zoom: params.has('z') ? Number(params.get('z')) : 6.5,
   /** Mesaj formatı: en kötü durum (tam nesne) varsayılan — karar #10. */
   format: (params.get('format') === STREAM_FORMAT.PATCH ? STREAM_FORMAT.PATCH : STREAM_FORMAT.FULL) as StreamFormat,
@@ -57,27 +58,46 @@ const symbols = new SymbolCache();
 const store = createMapStore();
 const router = new EventRouter(store);
 
-// MapLibre modu artık gerçek paket: @c2/map-maplibre. Birlikler `marker` renderer'ıyla çizilir;
-// ikon id'si SIDC, görüntü `resolveImage` ile sembol önbelleğinden tembel üretilir.
-const adapter =
-  settings.engine === ENGINE.DECK
-    ? new SpikeDeckAdapter(symbols, () => stats.mapRendered())
-    : createMaplibreAdapter({
-        // Stil yalnız arka plan; altlıklar store'dan gelir (Faz 1.2).
-        workerUrl,
-        renderers: {
-          milsym: markerRenderer({ icon: (f) => (f.props as { sidc?: string } | undefined)?.sidc }),
+// Tek paket: @c2/map-maplibre. `milsym` kind'ı motor seçimine göre ya deck.gl'e (`deckRenderers`) ya
+// MapLibre `marker` renderer'ına gider; altlıklar her iki durumda da aynı MapLibre haritasında.
+const sidcOf = (f: Feature) => (f.props as { sidc?: string } | undefined)?.sidc;
+const deckIcons = new Map<string, DeckIcon>();
+const deckIcon = (sidc: string): DeckIcon => {
+  let icon = deckIcons.get(sidc);
+  if (!icon) {
+    const img = symbols.get(sidc);
+    icon = { id: sidc, url: symbols.dataUrl(sidc), width: img.canvas.width, height: img.canvas.height };
+    deckIcons.set(sidc, icon);
+  }
+  return icon;
+};
+
+const adapter = createMaplibreAdapter({
+  // Stil yalnız arka plan; altlıklar store'dan gelir (Faz 1.2).
+  workerUrl,
+  ...(settings.engine === ENGINE.DECK
+    ? {
+        deckRenderers: {
+          milsym: {
+            icon: (f) => {
+              const sidc = sidcOf(f);
+              return sidc ? deckIcon(sidc) : undefined;
+            },
+            size: (f) => symbols.get(sidcOf(f)!).height, // CSS px
+          },
         },
-        resolveImage: (sidc) => {
+        motion: settings.motion,
+        motionDurationMs: 1000 / settings.perUnitHz,
+      }
+    : {
+        renderers: { milsym: markerRenderer({ icon: sidcOf }) },
+        resolveImage: (sidc: string) => {
           const img = symbols.get(sidc);
           const ctx = img.canvas.getContext('2d')!;
           return { image: ctx.getImageData(0, 0, img.canvas.width, img.canvas.height), pixelRatio: img.pixelRatio };
         },
-      });
-if (adapter instanceof SpikeDeckAdapter) {
-  adapter.smooth = settings.smooth;
-  adapter.durationMs = 1000 / settings.perUnitHz;
-}
+      }),
+});
 
 await adapter.mount(document.getElementById('map')!, {
   initialView: { center: [32.85, 39.9], zoom: settings.zoom },
@@ -87,7 +107,7 @@ await adapter.mount(document.getElementById('map')!, {
   basemapProviders: new BasemapProviderRegistry(),
 });
 // Ölçüm paneli: harita çizim sayacı motorun kendisinden (kaçış kapısı `getEngine`).
-if (!(adapter instanceof SpikeDeckAdapter)) adapter.getEngine().on('render', () => stats.mapRendered());
+adapter.getEngine().on('render', () => stats.mapRendered());
 /** MapSync'in flush'larını ölçen zamanlayıcı sarmalayıcısı. */
 function timedScheduler(inner: Scheduler): Scheduler {
   return {
@@ -162,7 +182,7 @@ function resetUnits(): void {
 
 store.transaction((tx) => {
   tx.upsertLayers([{ id: LAYER_ID, name: 'Birlikler', parentId: null, visible: true, opacity: 1, renderGroup: true }]);
-  tx.upsertBasemaps(BASEMAPS); // deck.gl modunda spike adapter'ı altlıkları yok sayar (kendi stilini kullanır)
+  tx.upsertBasemaps(BASEMAPS);
 });
 resetUnits();
 generator.start();
@@ -190,11 +210,6 @@ store.subscribeSelection(() => {
 // ── Kare döngüsü ─────────────────────────────────────────────────
 
 function frame(now: number): void {
-  if (adapter instanceof SpikeDeckAdapter && adapter.smooth) {
-    const t0 = performance.now();
-    adapter.animate(now);
-    stats.work(performance.now() - t0, 0, false);
-  }
   if (stats.frame(now)) renderStats();
   requestAnimationFrame(frame);
 }
@@ -231,9 +246,13 @@ panel.innerHTML = `
     <select id="apply">${[5, 10, 20, 30].map((n) => option(n, String(n), settings.applyHz)).join('')}</select>
   </label>
   <label ${settings.engine === ENGINE.DECK ? '' : 'style="display:none"'}>Akıcı hareket
-    <input type="checkbox" id="smooth" ${settings.smooth ? 'checked' : ''} />
+    <select id="motion">
+      ${option(MOTION_MODE.AUTO, 'Otomatik (FPS)', settings.motion)}
+      ${option(MOTION_MODE.ON, 'Açık', settings.motion)}
+      ${option(MOTION_MODE.OFF, 'Kapalı', settings.motion)}
+    </select>
   </label>
-  <div ${settings.engine === ENGINE.MAPLIBRE ? '' : 'style="display:none"'}>
+  <div>
     <label>Altlık
       <select id="basemap">${BASEMAPS.filter((b) => b.id !== ORTOFOTO_ID)
         .map((b) => option(b.id, b.name, BASEMAPS.find((x) => x.visible && x.id !== ORTOFOTO_ID)?.id ?? ''))
@@ -256,7 +275,7 @@ function reloadWith(changes: Record<string, string>): void {
   next.set('n', String(settings.count));
   next.set('hz', String(settings.perUnitHz));
   next.set('apply', String(settings.applyHz));
-  next.set('smooth', settings.smooth ? '1' : '0');
+  next.set('motion', settings.motion);
   next.set('format', settings.format);
   for (const [k, v] of Object.entries(changes)) next.set(k, v);
   location.search = next.toString();
@@ -264,14 +283,17 @@ function reloadWith(changes: Record<string, string>): void {
 
 $<HTMLSelectElement>('engine').onchange = (e) => reloadWith({ engine: (e.target as HTMLSelectElement).value });
 $<HTMLSelectElement>('apply').onchange = (e) => reloadWith({ apply: (e.target as HTMLSelectElement).value });
-$<HTMLInputElement>('smooth').onchange = (e) => reloadWith({ smooth: (e.target as HTMLInputElement).checked ? '1' : '0' });
+// Mod canlı değişir (sayfa yenilenmez): adapter.setMotionMode
+$<HTMLSelectElement>('motion').onchange = (e) => {
+  settings.motion = (e.target as HTMLSelectElement).value as MotionMode;
+  adapter.setMotionMode(settings.motion);
+};
 $<HTMLSelectElement>('count').onchange = (e) => {
   settings.count = Number((e.target as HTMLSelectElement).value);
   resetUnits();
 };
 $<HTMLSelectElement>('hz').onchange = (e) => {
-  settings.perUnitHz = generator.perUnitHz = Number((e.target as HTMLSelectElement).value);
-  if (adapter instanceof SpikeDeckAdapter) adapter.durationMs = 1000 / settings.perUnitHz;
+  reloadWith({ hz: (e.target as HTMLSelectElement).value }); // kayma süresi mount'ta verilir
 };
 $<HTMLSelectElement>('format').onchange = (e) => reloadWith({ format: (e.target as HTMLSelectElement).value });
 // Altlıklar store üzerinden: radyo davranışını store'un exclusiveGroup kuralı sağlar.
@@ -305,6 +327,7 @@ function renderStats(): void {
     ['Çekirdek + besleme işi (ms / sn)', fmt(s.mapWorkMsPerSec, 1), grade(s.mapWorkMsPerSec, 70, 150, false)],
     ['En uzun flush', `${fmt(s.maxFlushMs, 1)} ms`, grade(s.maxFlushMs, 4, 16, false)],
     ['Long task (>50 ms)', fmt(s.longTasks), grade(s.longTasks, 0, 2, false)],
+    ['Akıcı hareket', settings.engine === ENGINE.DECK ? `${adapter.motion.mode} → ${adapter.motion.active ? 'açık' : 'kapalı'}` : '—'],
     ['Store: düşürülen eski rev', fmt(store.stats.droppedStale)],
     ['Benzersiz sembol', fmt(symbols.size)],
   ];

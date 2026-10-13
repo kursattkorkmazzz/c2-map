@@ -230,4 +230,17 @@ export class FakeMap implements MapLike {
   getCanvas() {
     return this.canvas;
   }
+
+  readonly controls: unknown[] = [];
+
+  addControl(control: { onAdd?(map: FakeMap): unknown }): void {
+    this.controls.push(control);
+    control.onAdd?.(this);
+  }
+
+  removeControl(control: { onRemove?(map: FakeMap): unknown }): void {
+    const i = this.controls.indexOf(control);
+    if (i >= 0) this.controls.splice(i, 1);
+    control.onRemove?.(this);
+  }
 }

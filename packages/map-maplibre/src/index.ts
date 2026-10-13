@@ -9,6 +9,17 @@ export {
   type MaplibreAdapterStats,
   type ResolvedImage,
 } from './adapter';
+export {
+  deckIconRenderer,
+  loadDeckModules,
+  type DeckKindRenderer,
+  type DeckModules,
+  type DeckOverlayLike,
+  type DeckStats,
+  type DeckTiming,
+} from './deck/deck-controller';
+export type { DeckIcon } from './deck/deck-group';
+export { MOTION_MODE, MotionGovernor, type MotionAutoOptions, type MotionMode } from './deck/motion';
 export { SUPPORTED_BASEMAP_SOURCES, toSourceSpec, type BasemapStats } from './basemaps';
 export { STANDARD_PROPS, type EncodedPart, type PropertyValue } from './encode';
 export { circleRing, representativePoint, toGeoJSONGeometry } from './geometry';

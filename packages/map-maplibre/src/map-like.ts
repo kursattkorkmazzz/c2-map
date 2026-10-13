@@ -58,6 +58,10 @@ export interface MapLike {
   project(lngLat: [number, number]): { x: number; y: number };
   unproject(point: [number, number]): { lng: number; lat: number };
 
+  // Kontroller (deck.gl MapLibreOverlay bir IControl'dür)
+  addControl(control: any): unknown;
+  removeControl(control: any): unknown;
+
   // Yaşam döngüsü
   resize(): unknown;
   remove(): void;

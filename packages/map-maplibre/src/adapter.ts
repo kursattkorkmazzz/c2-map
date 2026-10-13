@@ -8,8 +8,9 @@
 //     durum     → setFeatureState (veriye dokunmaz)
 //   etkileşim → hit-test (yalnız etkileşimli katmanlar) → MapEventSink (EventRouter)
 //
-// Statik / seyrek değişen kind'ler içindir (kontrol tedbirleri, çizimler; ~10k'ya kadar).
-// Canlı birlikler deck.gl renderer'ı ile çizilir (Faz 1.3).
+// MapLibre katmanları statik / seyrek değişen kind'ler içindir (kontrol tedbirleri, çizimler; ~10k'ya kadar).
+// Canlı birlikler `deckRenderers` ile deck.gl'e yönlendirilir (deck/deck-controller.ts): aynı harita,
+// aynı render group sırası; deck katmanları MapLibre yığınına `beforeId` ile girer (interleaved).
 
 import {
   FEATURE_CHANGE,
@@ -33,6 +34,8 @@ import {
   type RenderGroup,
 } from '@c2/map-core';
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
+import { DeckController, loadDeckModules, type DeckKindRenderer, type DeckModules, type DeckTiming } from './deck/deck-controller';
+import { MOTION_MODE, type MotionAutoOptions, type MotionMode } from './deck/motion';
 import { BasemapController, SUPPORTED_BASEMAP_SOURCES, type BasemapStats } from './basemaps';
 import { partId, SourceDiffBuilder, STANDARD_PROPS, diffPart, type StoredPart } from './encode';
 import type { MapImage, MapLike, GeoJSONSourceLike } from './map-like';
@@ -70,11 +73,27 @@ export type MaplibreAdapterOptions = {
   renderers?: Record<string, MaplibreKindRenderer>;
   /** Harita üretici (test için sahte harita verilir). Varsayılan: `maplibre-gl` dinamik import. */
   createMap?: (container: HTMLElement, init: MapInit) => Promise<MapLike>;
+  /**
+   * deck.gl ile çizilecek kind'ler (canlı, yoğun unsurlar: birlikler). Aynı kind `renderers`'ta da
+   * varsa deck.gl önceliklidir. Boşsa deck.gl hiç yüklenmez.
+   */
+  deckRenderers?: Record<string, DeckKindRenderer>;
+  /** Akıcı hareket: `off` (varsayılan) / `on` / `auto` (kare hızına göre). Sonradan `setMotionMode`. */
+  motion?: MotionMode;
+  /** Akıcı harekette iki konum arası kayma süresi (ms) ≈ mesaj aralığı. Varsayılan 1000. */
+  motionDurationMs?: number;
+  motionAuto?: MotionAutoOptions;
+  /** deck.gl modülleri (test için sahte verilir). Varsayılan: `@deck.gl/*` dinamik import. */
+  loadDeck?: () => Promise<DeckModules>;
+  /** Saat / kare zamanlayıcı (test için). */
+  deckTiming?: DeckTiming;
 };
 
 export type MaplibreAdapterStats = BasemapStats & {
   /** Renderer'ı olmayan ve fallback ile de çözülemeyen (çizilmeyen) unsur güncellemeleri. */
   readonly skippedUnsupported: number;
+  /** deck.gl kind'ı olup ikonu üretilemediği için çizilmeyen unsur güncellemeleri. */
+  readonly skippedNoIcon: number;
 };
 
 const DEFAULT_STYLE: StyleSpecification = {
@@ -96,21 +115,32 @@ type FeatureRecord = {
   groupId: string;
   /** Çizen renderer'ın kind'ı (fallback'te unsurunkinden farklı olabilir). */
   kind: string;
+  engine: Engine;
+  /** MapLibre kaynağındaki parçalar (deck.gl unsurlarında boş). */
   parts: Map<string, StoredPart>;
 };
+
+type Engine = 'maplibre' | 'deck';
+
+type ResolvedRenderer =
+  | { engine: 'maplibre'; kind: string; renderer: MaplibreKindRenderer; feature: Feature }
+  | { engine: 'deck'; kind: string; renderer: DeckKindRenderer; feature: Feature };
 
 const sourceIdOf = (groupId: string) => `c2-src-${groupId}`;
 
 export class MaplibreAdapter implements MapAdapter<MapLike> {
-  /** Son `applyBatch`'te kaynaklara gönderilen parça işlemi sayısı (ölçüm için). */
+  /** Son `applyBatch`'te kaynaklara gönderilen parça işlemi + deck.gl unsur işlemi sayısı (ölçüm için). */
   lastSent = 0;
+  private deckSent = 0;
 
   private map: MapLike | null = null;
+  private deck: DeckController | null = null;
   private basemaps: BasemapController | null = null;
   private events: MapEventSink | null = null;
   private kinds: FeatureKindRegistry | null = null;
   private pixelRatio = 1;
   private readonly renderers = new Map<string, MaplibreKindRenderer>();
+  private readonly deckRenderers: Map<string, DeckKindRenderer>;
   private readonly groups = new Map<string, GroupState>();
   private readonly features = new Map<string, FeatureRecord>();
   private readonly detachers: (() => void)[] = [];
@@ -119,6 +149,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   constructor(private readonly options: MaplibreAdapterOptions = {}) {
     const renderers = options.renderers ?? { vector: vectorRenderer, marker: defaultMarkerRenderer };
     for (const [kind, renderer] of Object.entries(renderers)) this.renderers.set(kind, renderer);
+    this.deckRenderers = new Map(Object.entries(options.deckRenderers ?? {}));
   }
 
   get capabilities(): MapCapabilities {
@@ -129,13 +160,26 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       clustering: false,
       draw: false,
       featureState: true,
-      supportedFeatureKinds: [...this.renderers.keys()],
+      supportedFeatureKinds: [...new Set([...this.renderers.keys(), ...this.deckRenderers.keys()])],
       supportedBasemapSources: SUPPORTED_BASEMAP_SOURCES,
     };
   }
 
   get stats(): MaplibreAdapterStats {
-    return { ...this.mutableStats, skippedBasemaps: this.basemaps?.stats.skippedBasemaps ?? 0 };
+    return {
+      ...this.mutableStats,
+      skippedNoIcon: this.deck?.stats.skippedNoIcon ?? 0,
+      skippedBasemaps: this.basemaps?.stats.skippedBasemaps ?? 0,
+    };
+  }
+
+  /** Akıcı hareketin modu ve şu an açık olup olmadığı (AUTO'da kare hızına göre değişir). */
+  get motion(): { mode: MotionMode; active: boolean } {
+    return this.deck?.motion ?? { mode: this.options.motion ?? MOTION_MODE.OFF, active: false };
+  }
+
+  setMotionMode(mode: MotionMode): void {
+    this.deck?.setMotionMode(mode);
   }
 
   // ── Yaşam döngüsü ──────────────────────────────────────────────
@@ -177,11 +221,26 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       });
     }
 
+    if (this.deckRenderers.size > 0) {
+      const modules = await (this.options.loadDeck ?? loadDeckModules)();
+      this.deck = new DeckController(map, modules, {
+        motion: this.options.motion ?? MOTION_MODE.OFF,
+        durationMs: this.options.motionDurationMs ?? 1000,
+        auto: this.options.motionAuto,
+        timing: this.options.deckTiming,
+        // deck katmanı grubun MapLibre katmanlarının üstüne, üst grubunkilerin altına girer.
+        beforeIdFor: (groupId) => this.firstLayerAbove(this.groups.get(groupId)?.group.order ?? 0, false),
+        orderOf: (groupId) => this.groups.get(groupId)?.group.order ?? 0,
+      });
+    }
+
     this.wireEvents(map);
   }
 
   unmount(): void {
     for (const detach of this.detachers.splice(0)) detach();
+    this.deck?.destroy();
+    this.deck = null;
     this.map?.remove();
     this.map = null;
     this.basemaps = null;
@@ -260,7 +319,10 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     // 1) Gruplar (önce: unsurlar gruplarının kaynağına yazılacak)
     let reorder = false;
     for (const group of batch.groups?.upsert ?? []) reorder = this.upsertGroup(group) || reorder;
-    if (reorder) this.restack();
+    if (reorder) {
+      this.restack();
+      this.deck?.invalidateOrder();
+    }
 
     // 2) Unsurlar → kaynak başına fark
     const diffs = new Map<string, SourceDiffBuilder>();
@@ -269,10 +331,11 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       if (!diff) diffs.set(sourceId, (diff = new SourceDiffBuilder()));
       return diff;
     };
+    this.deckSent = 0;
     for (const id of batch.features?.remove ?? []) this.removeFeature(id, diffFor);
     for (const rf of batch.features?.upsert ?? []) this.upsertFeature(rf, diffFor);
 
-    let sent = 0;
+    let sent = this.deckSent;
     for (const [sourceId, diff] of diffs) {
       if (diff.isEmpty) continue;
       (map.getSource(sourceId) as GeoJSONSourceLike).updateData(diff.toDiff());
@@ -285,6 +348,9 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
 
     // 4) Görsel durum
     for (const patch of batch.state ?? []) this.applyState(patch);
+
+    // 5) deck.gl: tüm değişiklikler tek setProps ile
+    this.deck?.flush();
   }
 
   registerRenderer(kind: string, renderer: AdapterRenderer<MapLike>): void {
@@ -340,6 +406,8 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     for (const layerId of state.layerIds) map.removeLayer(layerId);
     map.removeSource(state.sourceId);
     this.groups.delete(id);
+    this.deck?.removeGroup(id);
+    this.deck?.invalidateOrder();
     for (const [featureId, record] of this.features) if (record.groupId === id) this.features.delete(featureId);
   }
 
@@ -352,23 +420,35 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       sourceId: state.sourceId,
       layerId: (suffix) => `c2-${state.group.id}-${kind}-${suffix}`,
     };
-    const beforeId = this.firstLayerAbove(state.group.order);
+    const beforeId = this.firstLayerAbove(state.group.order, true);
     for (const spec of renderer.layers(ctx)) {
       this.requireMap().addLayer(spec, beforeId);
       state.layerIds.push(spec.id);
       if (!isNonInteractive(spec)) state.interactiveLayerIds.push(spec.id);
     }
     state.kinds.add(kind);
+    this.deck?.invalidateOrder(); // alt grubun deck katmanı artık bu katmanların altına girmeli
   }
 
-  /** `order`'dan büyük en yakın grubun ilk katmanı (yeni katmanlar onun altına girer). */
-  private firstLayerAbove(order: number): string | undefined {
-    let best: GroupState | undefined;
+  /**
+   * `order`'dan büyük en yakın grubun en alttaki katmanı (yeni katmanlar onun altına girer).
+   * `withDeck`: üst grubun yalnız deck.gl katmanı varsa onun MapLibre'deki taşıyıcısı da sayılır. deck
+   * katmanlarının kendi `beforeId`'si yalnız MapLibre katmanlarına bakar: deck.gl aynı `beforeId`'li
+   * katmanları tek taşıyıcıda topladığından, taşıyıcıya göre konumlanmak döngüsel olurdu.
+   */
+  private firstLayerAbove(order: number, withDeck: boolean): string | undefined {
+    const map = this.requireMap();
+    let best: { order: number; id: string } | undefined;
     for (const state of this.groups.values()) {
-      if (state.group.order <= order || state.layerIds.length === 0) continue;
-      if (!best || state.group.order < best.group.order) best = state;
+      if (state.group.order <= order || (best && state.group.order >= best.order)) continue;
+      let id = state.layerIds[0];
+      if (id === undefined && withDeck) {
+        const deckLayer = this.deck?.mapLayerIdOf(state.group.id);
+        if (deckLayer && map.getLayer(deckLayer)) id = deckLayer;
+      }
+      if (id !== undefined) best = { order: state.group.order, id };
     }
-    return best?.layerIds[0];
+    return best?.id;
   }
 
   // ── Unsurlar ───────────────────────────────────────────────────
@@ -386,7 +466,6 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     // Grup MapSync'ten gelmemişse (beklenmez) varsayılan sırayla oluştur.
     if (!this.groups.has(rf.groupId)) this.upsertGroup({ id: rf.groupId, layerId: rf.groupId, order: 0 });
     const state = this.groups.get(rf.groupId)!;
-    this.ensureKindLayers(state, resolved.kind, resolved.renderer);
 
     // Grup veya çizen kind değiştiyse eski parçalar eski kaynaktan kalkar, yenileri baştan eklenir.
     if (record && (record.groupId !== rf.groupId || record.kind !== resolved.kind)) {
@@ -395,6 +474,17 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     }
 
     const encodeRf = resolved.feature === rf.feature ? rf : { ...rf, feature: resolved.feature };
+    if (resolved.engine === 'deck') {
+      this.deckSent++;
+      if (this.deck!.upsert(encodeRf, resolved.renderer)) {
+        this.features.set(id, { groupId: rf.groupId, kind: resolved.kind, engine: 'deck', parts: new Map() });
+      } else {
+        this.features.delete(id); // ikonsuz: denetleyici zaten kaldırdı
+      }
+      return;
+    }
+
+    this.ensureKindLayers(state, resolved.kind, resolved.renderer);
     const parts = resolved.renderer.encode(encodeRf, this.encodeContext());
     const geometryChanged = rf.changed === RENDER_CHANGE_ALL || (rf.changed & FEATURE_CHANGE.GEOMETRY) !== 0;
     const diff = diffFor(state.sourceId);
@@ -421,12 +511,18 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     }
     if (record) for (const pid of record.parts.keys()) if (!nextParts.has(pid)) diff.remove.push(pid);
 
-    this.features.set(id, { groupId: rf.groupId, kind: resolved.kind, parts: nextParts });
+    this.features.set(id, { groupId: rf.groupId, kind: resolved.kind, engine: 'maplibre', parts: nextParts });
   }
 
   private removeFeature(id: string, diffFor: (sourceId: string) => SourceDiffBuilder): void {
     const record = this.features.get(id);
     if (!record) return;
+    if (record.engine === 'deck') {
+      this.deckSent++;
+      this.deck?.remove(id, record.groupId);
+      this.features.delete(id);
+      return;
+    }
     const state = this.groups.get(record.groupId);
     if (state) {
       const diff = diffFor(state.sourceId);
@@ -437,6 +533,10 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
 
   private applyState(patch: FeatureStatePatch): void {
     const record = this.features.get(patch.id);
+    if (record?.engine === 'deck') {
+      this.deck?.setState(patch.id, record.groupId, patch.state);
+      return;
+    }
     const state = record && this.groups.get(record.groupId);
     if (!record || !state) return; // ekranda değil: yeniden görünürse MapSync durumu tekrar gönderir
     for (const pid of record.parts.keys()) {
@@ -445,12 +545,18 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   }
 
   /** Kind'ın renderer'ı; yoksa çekirdeğin fallback zinciriyle desteklenen bir kind'a çevrilir. */
-  private resolveRenderer(feature: Feature): { kind: string; renderer: MaplibreKindRenderer; feature: Feature } | null {
-    const direct = this.renderers.get(feature.kind);
-    if (direct) return { kind: feature.kind, renderer: direct, feature };
-    const resolved = this.kinds?.resolveFor(feature, (kind) => this.renderers.has(kind));
-    if (!resolved) return null;
-    return { kind: resolved.kind, renderer: this.renderers.get(resolved.kind)!, feature: resolved };
+  private resolveRenderer(feature: Feature): ResolvedRenderer | null {
+    const direct = this.rendererFor(feature.kind, feature);
+    if (direct) return direct;
+    const resolved = this.kinds?.resolveFor(feature, (kind) => this.deckRenderers.has(kind) || this.renderers.has(kind));
+    return resolved ? this.rendererFor(resolved.kind, resolved) : null;
+  }
+
+  private rendererFor(kind: string, feature: Feature): ResolvedRenderer | null {
+    const deck = this.deckRenderers.get(kind);
+    if (deck) return { engine: 'deck', kind, renderer: deck, feature };
+    const renderer = this.renderers.get(kind);
+    return renderer ? { engine: 'maplibre', kind, renderer, feature } : null;
   }
 
   private encodeContext(): MaplibreEncodeContext {
@@ -505,10 +611,12 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     on('mouseout', () => setHovered(undefined));
   }
 
-  /** En üstteki etkileşimli parçanın unsur id'si. */
+  /** En üstteki etkileşimli unsurun id'si. Önce deck.gl (birlikler genelde en üstte), sonra MapLibre. */
   private hitTest(point: { x: number; y: number }): string | undefined {
     const map = this.map;
     if (!map) return undefined;
+    const deckHit = this.deck?.pick(point);
+    if (deckHit !== undefined) return deckHit;
     const layers: string[] = [];
     for (const state of this.groups.values()) {
       for (const id of state.interactiveLayerIds) if (map.getLayer(id)) layers.push(id);

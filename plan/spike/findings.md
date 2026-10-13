@@ -63,8 +63,9 @@ Sürümler: MapLibre GL JS 6.14, deck.gl 9.4, milsymbol 3.0.4 (APP-6 D).
 - **deck.gl 9.4 ↔ MapLibre 6:** `@deck.gl/mapbox` 9.4.0 + `MapboxOverlay` (interleaved),
   MapLibre'nin iç `map.transform` alanını okuyor; MapLibre 6.14'te bu alan `map._camera.transform`'a
   taşındı ve deck.gl her karede çöktü. Spike'ta `map.transform` getter'ı ile yamalandı.
-  deck.gl dokümanında MapLibre 6 uyumluluğu belirtiliyor → Faz 1'de dokümandaki yöntem
-  uygulanacak, bu senaryo test edilecek ([karar #16](../decisions.md)).
+  **Çözüm (Faz 1.3):** dokümandaki doğru paket `@deck.gl/maplibre` `MapLibreOverlay`; MapLibre'nin
+  açık API'sini kullanıyor, MapLibre 6.14'te yamasız çalıştı ([aşağıda](#deckgl-renderer-faz-13-2026-10-13)).
+  Yama yalnız eski spike sayfasında (`index.html`) kaldı.
 - **deck.gl ikili (binary) veri:** Aynı typed array referansı tekrar verilirse deck.gl güncellemeyi
   atlıyor. Her güncellemede diziyi **yeni bir sarmalayıcı nesneyle** (`{ value, size }`) verip
   `updateTriggers` sürüm sayacını artırmak gerekiyor; değişmeyen öznitelikler yeniden hesaplanmıyor.
@@ -157,6 +158,28 @@ Düzeltme sonrası (gerçek GPU, headless Edge):
 | 10k, kısmi patch | 92 | 19 | 33 ms | 0 | 38 ms/sn |
 | 3k, tam nesne, z 9 | 101 | 101 | 25 ms | 0 | 15 ms/sn |
 | (eski spike, mod 3, 10k) | 76 | — | — | — | — |
+
+## deck.gl renderer (Faz 1.3, 2026-10-13)
+
+`core.html?engine=deck` artık spike taslağı (`src/core/deck-adapter.ts`, silindi) yerine gerçek
+`@c2/map-maplibre` adapter'ıyla çalışıyor: `deckRenderers: { milsym }` → `MapLibreOverlay` (interleaved).
+Altlıklar deck modunda da aynı MapLibre haritasında (eski taslak altlıkları yok sayıyordu).
+Ortam: headless Edge, gerçek GPU, 1400×900, tam nesne formatı, z 6.5.
+
+| Senaryo | FPS (sayfa) | Harita çizimi / sn | En uzun kare | En uzun flush | Long task | Çekirdek + besleme işi |
+|---|---|---|---|---|---|---|
+| 10k, hareket `auto` (açık kaldı) | 68 | 68 | 17 ms | 3,8 ms | 0 | 39 ms/sn |
+| 10k, hareket `on` | 68 | 68 | 17 ms | 3,7 ms | 0 | 42 ms/sn |
+| 50k, hareket `off` | 115 | 9 | 25 ms | 11,6 ms | 0 | 194 ms/sn |
+| 50k, hareket `auto` (kendiliğinden kapandı) | 119 | 9 | 17 ms | 10,8 ms | 0 | 155 ms/sn |
+| 10k, MapLibre motoru (karşılaştırma) | 72 | 72 | 42 ms | 6,7 ms | 0 | 56 ms/sn |
+
+- `map.transform` hatası yok; seçim (tıklama → `pickObject`) ve canlı güncellenen kart çalışıyor.
+- `AUTO` 50k'da beklendiği gibi hareketi kapattı (kare hızı eşiğin altında kaldı), 10k'da açık tuttu.
+- 50k'da en uzun flush 11 ms (bütçe 4): adapter dizilerine yazım + 50k RenderFeature. Ayrıştırma
+  Faz 1.5.3'te (store / flush / adapter payı).
+- Bulunan hata: varsayılan zamanlayıcı `requestAnimationFrame`'i bağsız çağırınca tarayıcıda
+  "Illegal invocation" — Node testinde görünmüyordu; düzeltildi, test eklendi.
 
 ## Tam nesne ↔ kısmi patch (2026-10-13)
 

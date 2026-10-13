@@ -55,12 +55,15 @@ Durum: ✅ (kod: `packages/map-maplibre/src/basemaps.ts`, 16 test; gerçek servi
 
 ## 1.3 deck.gl renderer'ı (canlı birlikler)
 Tasarım: [04](../design/04-sync-and-rendering.md#deckgl-yolu)
-- [ ] deck.gl dokümanındaki MapLibre 6 entegrasyon yöntemi; spike'taki `map.transform` senaryosunu test et
-- [ ] Render group başına `IconLayer`; id → indeks eşlemesi; swap-remove
-- [ ] Typed array + sarmalayıcı + `updateTriggers` güncelleme deseni
-- [ ] Seçim/hover vurgusu, `pickObject` hit-test
-- [ ] Akıcı hareket + `MOTION_MODE` (`off` / `on` / `auto` histerezisli)
-- [ ] Kind → renderer seçimi (adapter konfigürasyonu)
+Durum: ✅ (kod: `packages/map-maplibre/src/deck/`, 36 test; gerçek tarayıcıda `core.html?engine=deck`)
+- [x] deck.gl dokümanındaki MapLibre 6 entegrasyon yöntemi: `@deck.gl/maplibre` `MapLibreOverlay` (interleaved). `map.transform` hatası **yok**, yama gerekmedi (hata `@deck.gl/mapbox`'a özgüydü)
+- [x] Render group başına `IconLayer`; id → indeks eşlemesi; swap-remove (`DeckGroupData`)
+- [x] Typed array + sarmalayıcı + `updateTriggers` güncelleme deseni; uzunluk değişmezse aynı `data` nesnesi (ikonlar yeniden hesaplanmaz)
+- [x] Seçim/hover vurgusu (ayrı `ScatterplotLayer` halkası), `pickObject` hit-test (önce deck, sonra MapLibre)
+- [x] Akıcı hareket + `MOTION_MODE` (`off` / `on` / `auto` histerezisli, her geçişte bekleme ×2); `setMotionMode` ile canlı değişir
+- [x] Kind → renderer seçimi (adapter konfigürasyonu): tek adapter, `deckRenderers` → deck.gl, `renderers` → MapLibre; fallback zinciri ikisini de görür
+- [x] Gruplar arası sıra korunur: deck katmanı `beforeId` ile grubun MapLibre katmanlarının üstüne, üst grubunkilerin altına
+- [ ] (Sonraya) LOD: uzak zoom'da `ScatterplotLayer` noktası → [Faz 3.5](phase-3-symbology.md)
 
 ## 1.4 `@c2/map-react`
 Tasarım: [07](../design/07-react-api.md)

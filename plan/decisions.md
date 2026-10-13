@@ -8,6 +8,8 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-13 | **#16 deck.gl entegrasyonu:** `@deck.gl/maplibre` `MapLibreOverlay` (interleaved), `MaplibreAdapter` içinde ikinci çizici (`deckRenderers`); ayrı deck adapter'ı yok | Doküman bu paketi öneriyor; `@deck.gl/mapbox`'taki `map.transform` hatası burada yok (tarayıcıda doğrulandı). Tek adapter = altlık, sıra, olay ortak | [04](design/04-sync-and-rendering.md#deckgl-yolu), [findings](spike/findings.md#deckgl-renderer-faz-13-2026-10-13) |
+| 2026-10-13 | Akıcı hareket `AUTO` **sayfa** kare hızına bakar (harita çizim hızına değil); bekleme her geçişte ×2; varsayılan mod `off` | Hareket kapalıyken harita ~10 Hz çizilir, çizim hızına bakan karar hareketi hiç geri açmazdı | [04](design/04-sync-and-rendering.md#akıcı-hareket) |
 | 2026-10-13 | MapLibre'de ikon boyutu (`icon-size`) **katman sabiti**; unsur başına veri güdümlü değil | Tarayıcı ölçümü: veri güdümlü `icon-size` 10k'da FPS'i ~120'den 1–2'ye düşürdü | [04](design/04-sync-and-rendering.md#hover--seçim--bayatlık--feature-state), [findings](spike/findings.md#gerçek-maplibre-adapterı-faz-11-2026-10-13) |
 | 2026-10-13 | **#10 Mesaj formatı:** kısmi patch ve tam nesne **ikisi de** desteklenir; **en kötü durum (her mesajda tam nesne) esas alınır**, değişikliği çekirdek bulur | Backend formatı belli değil; en kötü durumda da çalışmalı | [03](design/03-store.md#en-kötü-durum-her-mesajda-tam-nesne), [Faz 1.0](phases/phase-1-2d-mvp.md#10-akış-girişi-tam-nesne-en-kötü-durum-ve-kısmi-patch) |
 | 2026-10-13 | **#11 Frekans:** birlik başına ≤ 1 Hz, haritaya uygulama tavanı 10 Hz | Ölçümler bu senaryoda rahat | [spike](spike/findings.md) |
@@ -19,7 +21,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 | 2026-10-12 | Düzenleme çakışması: taslak (draft) + `rev` (Faz 2) | Kullanıcı düzenlerken backend güncellemesi taslağı bozmamalı | [09](design/09-interaction-and-editing.md#düzenleme-ve-eşzamanlılık) |
 | 2026-10-12 | Akıcı hareket modu: `off` / `on` / `auto` | Kullanıcıya bırakılabilir veya çizim hızına göre otomatik | [04](design/04-sync-and-rendering.md#akıcı-hareket) |
 | 2026-10-12 | Kümeleme ilk sürümde yok; boş "sunum aşaması" genişleme noktası bugünden | Sonradan eklemek kolay olmalı | [04](design/04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası) |
-| 2026-10-12 | deck.gl ↔ MapLibre 6: Faz 1'de deck.gl dokümanındaki yöntemle entegre | Doküman uyumluluk belirtiyor; spike'taki hata senaryosu test edilecek | [spike](spike/findings.md#uyumluluk-notları) |
+| 2026-10-12 | deck.gl ↔ MapLibre 6: Faz 1'de deck.gl dokümanındaki yöntemle entegre (2026-10-13'te uygulandı, yukarıda) | Doküman uyumluluk belirtiyor; spike'taki hata senaryosu test edilecek | [spike](spike/findings.md#uyumluluk-notları) |
 | 2026-10-12 | Canlı birlikler deck.gl ile (karma model); tasarım hedefi 50k | MapLibre GeoJSON 50k'da donuyor | [spike](spike/findings.md) |
 | 2026-10-12 | LOD zorunlu | 50k'da sınır ekrandaki sembol sayısı | [04](design/04-sync-and-rendering.md#zooma-göre-gösterim-lod) |
 | rev. 2 | Store: amaca özel `MapStore`; zustand yalnız UI durumu | Id bazlı abonelik + değişiklik günlüğü | [03](design/03-store.md) |
@@ -35,7 +37,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 | 11 | Güncelleme frekansı | ✅ ≤ 1 Hz / tavan 10 Hz | — |
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma (glyph/sprite çakışması) | Faz 4 |
 | 14 | Unsurlar LayerTree'de mi? | ⏳ LayerTree fazında detaylandırılacak | Faz 1.6 |
-| 16 | deck.gl ↔ MapLibre 6 | ✅ Dokümana göre entegre; spike'taki `map.transform` hatası test edilecek | Faz 1 |
+| 16 | deck.gl ↔ MapLibre 6 | ✅ `@deck.gl/maplibre` `MapLibreOverlay` (interleaved); `map.transform` hatası yok, yama gerekmedi | Faz 1.3 ✅ |
 | 17 | LOD eşikleri | ⏳ Hangi zoom'da nokta → sembol (Faz 3.5'teki ölçümle) | Faz 3 |
 | 18 | Etiketler | ⏸ Hangi zoom'dan itibaren; MapLibre mi deck.gl `TextLayer` mı | Faz 3 |
 | 19 | Hedef donanım | ⏸ Değişken; tasarım düşük donanımda da çalışacak şekilde (LOD, `auto` hareket) | Faz 1 ölçümleri |

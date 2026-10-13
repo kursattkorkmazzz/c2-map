@@ -140,27 +140,45 @@ Paint: `['case', ['boolean', ['feature-state', 'selected'], false], seçiliRenk,
 > Spike'ta MapLibre GeoJSON kaynağı 50k'da hiç yenilenemedi; deck.gl 50k × 1 Hz'i ana thread'de
 > ~3 ms/sn ile taşıdı ([spike](../spike/findings.md)). Canlı birlikler için **ana yol** budur.
 
-- `MapboxOverlay` (interleaved) ile MapLibre katman yığınına girer, aynı WebGL bağlamını
-  paylaşır. Entegrasyon Faz 1'de deck.gl dokümanındaki MapLibre 6 yöntemine göre yapılır
-  ([karar #16](../decisions.md)).
+- **Tek adapter, iki çizici.** `MaplibreAdapter({ deckRenderers: { milsym: … } })`: bu kind'ler
+  deck.gl'e, diğerleri MapLibre katmanlarına gider. Altlıklar, gruplar, olaylar ortak. Fallback
+  zinciri iki motorun kind'larını da görür; aynı kind ikisinde varsa deck.gl önceliklidir.
+- `@deck.gl/maplibre` `MapLibreOverlay` (**interleaved**) — MapLibre katman yığınına girer, aynı
+  WebGL2 bağlamını paylaşır ([karar #16](../decisions.md)). Spike'taki `map.transform` hatası
+  `@deck.gl/mapbox`'a özgüydü; bu paket MapLibre'nin açık API'sini kullanır, yama gerekmez.
+- **Sıra:** deck katmanının `beforeId`'si = üst sıradaki ilk grubun ilk MapLibre katmanı. deck.gl
+  9.4 aynı `beforeId`'li deck katmanlarını MapLibre'de tek bir taşıyıcı özel katmanda toplar
+  (`deck-maplibre-layer-group-before:<id>` / `…-last`); sonradan eklenen MapLibre katmanları
+  üst grubun yalnız-deck olduğu durumda bu taşıyıcının altına girer. Kind katmanı eklendiğinde,
+  grup sırası değiştiğinde veya grup silindiğinde deck sırası yeniden hesaplanır.
 - Render group başına bir `IconLayer` (LOD'da `ScatterplotLayer`).
-- Birlik başına düz typed array'ler (id → indeks eşlemesi): konum (Float64), boyut, renk.
+- Birlik başına düz typed array'ler (id → indeks eşlemesi): konum (Float64), boyut (Float32),
+  renk (Uint8 RGBA; A = efektif opaklık).
 - Değişiklik = dizide birkaç sayıyı yazmak + diziyi **yeni bir sarmalayıcı nesneyle**
   (`{ value, size }`) vermek + `updateTriggers` sürümünü artırmak. Aynı referans verilirse
-  deck.gl güncellemeyi atlar.
-- Seçim/hover: `autoHighlight` + küçük ayrı vurgu katmanı; hit-test `pickObject`.
+  deck.gl güncellemeyi atlar. Uzunluk değişmediyse `data` nesnesi aynı kalır → `getIcon`
+  (birlik başına JS çağrısı) yalnız ikon/boyut/opaklık değişince yeniden çalışır.
+- Bir `applyBatch` = en fazla bir `overlay.setProps`.
+- Seçim/hover: ayrı `ScatterplotLayer` halkası (yalnız durumu olan birlikler); hit-test
+  `pickObject` → katman id'si + indeks → birlik id'si. Önce deck, sonra MapLibre katmanları.
 - Unsur silinince indeks boşluğu: son elemanla yer değiştir (swap-remove) + eşlemeyi güncelle.
+- İkonu üretilemeyen unsur çizilmez, `stats.skippedNoIcon` sayar.
 
 ### Akıcı hareket
 
 - Her birlik için "nereden → nereye, ne zaman başladı" tutulur; her karede ara konum
   hesaplanıp konum dizisi GPU'ya yüklenir. Görüntü bir mesaj aralığı geriden gelir.
 - 50k'da kare başına ~1–2 ms JS; gerekirse ara konum hesabı shader'a taşınır (Faz 4).
-- **Mod:** `MOTION_MODE = { OFF, ON, AUTO }` — kullanıcı ayarı, harita bazında.
-- `AUTO`: adapter son birkaç saniyenin harita çizim hızını izler. Eşiğin altına düşünce
-  (ör. < 25 çizim/sn) kapatır, belirgin biçimde üstüne çıkınca (ör. > 45) tekrar açar.
-  Histerezis (iki eşik + minimum bekleme süresi) gidip gelmeyi önler.
-- Geçişte zıplama yok: kapanırken son hedef konuma, açılırken mevcut konumdan devam edilir.
+- **Mod:** `MOTION_MODE = { OFF, ON, AUTO }` — adapter seçeneği `motion` (varsayılan `off`),
+  çalışırken `adapter.setMotionMode(mode)`; durum `adapter.motion → { mode, active }`.
+  Kayma süresi `motionDurationMs` ≈ mesaj aralığı.
+- `AUTO`: **sayfa** kare hızını ölçer (saniyede bir). Harita çizim hızına bakmaz: hareket
+  kapalıyken harita zaten ~uygulama Hz'inde çizilir, o ölçüye bakan karar hareketi bir daha
+  açmazdı. Varsayılan eşikler: < 25 fps 3 sn sürerse kapat, > 50 fps sürerse aç. Her yön
+  değiştirmede bekleme ikiye katlanır (üst sınır 60 sn) → gidip gelme döngüsü sönümlenir.
+- Geçişte zıplama yok: kapanırken herkes son hedef konumuna atlar, kayarken gelen yeni
+  hedef ekrandaki konumdan başlar. Yeni eklenen birlik kaymaz, yerinde belirir.
+- Kare döngüsü yalnız hareket eden birlik varken döner; hareket bitince durur.
 
 ## Askeri semboller ve ikonlar
 
