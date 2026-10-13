@@ -1,0 +1,252 @@
+// react.html: @c2/map-react ile aynı boru hattı (Faz 1.4 tarayıcı doğrulaması).
+//   - Altlıklar ve kontrol tedbirleri: bildirimsel bileşenler (<MapBasemap>, <MapLayer>, <Polygon>…)
+//   - Canlı birlikler: React'ten GEÇMEZ; üreteç → createLayerStream → store (07-react-api.md#canlı-veri)
+//   - Seçili birlik kartı: <MapOverlay> + useFeature (yalnız o birlik değişince render)
+// URL: ?n=3000&motion=auto|on|off
+
+import 'maplibre-gl/dist/maplibre-gl.css';
+import '../style.css';
+import './react.css';
+import {
+  createLayerStream,
+  createMapStore,
+  GEOMETRY_KIND,
+  MAP_EVENT,
+  STREAM_FORMAT,
+  type Feature,
+  type StreamItem,
+} from '@c2/map-core';
+import { createMaplibreAdapter, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
+import {
+  Circle,
+  Map,
+  MapBasemap,
+  MapLayer,
+  MapOverlay,
+  Polygon,
+  Polyline,
+  useBasemaps,
+  useFeature,
+  useLayerVisibility,
+  useMap,
+  useMapEvent,
+  useMapStore,
+  useSelection,
+} from '@c2/map-react';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import { useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BASEMAPS } from '../core/basemaps';
+import { UnitGenerator, type UnitMessage } from '../generator';
+import { buildSidc, ECHELONS, ENTITIES, SymbolCache } from '../symbology';
+
+const params = new URLSearchParams(location.search);
+const COUNT = Number(params.get('n') ?? 3000);
+const MOTION = (params.get('motion') ?? MOTION_MODE.AUTO) as MotionMode;
+const UNITS = 'birlikler';
+
+// ── Uygulama düzeyi nesneler (React dışında, bir kez) ────────────
+
+const symbols = new SymbolCache();
+const deckIcons = new globalThis.Map<string, DeckIcon>();
+const sidcOf = (f: Feature) => (f.props as { sidc?: string } | undefined)?.sidc;
+
+const adapter = createMaplibreAdapter({
+  workerUrl,
+  deckRenderers: {
+    milsym: {
+      icon: (f) => {
+        const sidc = sidcOf(f);
+        if (!sidc) return undefined;
+        let icon = deckIcons.get(sidc);
+        if (!icon) {
+          const img = symbols.get(sidc);
+          icon = { id: sidc, url: symbols.dataUrl(sidc), width: img.canvas.width, height: img.canvas.height };
+          deckIcons.set(sidc, icon);
+        }
+        return icon;
+      },
+      size: (f) => symbols.get(sidcOf(f)!).height,
+    },
+  },
+  motion: MOTION,
+});
+
+const store = createMapStore();
+
+// ── Canlı akış (React dışı) ──────────────────────────────────────
+
+let entityOf: number[] = [];
+let echelonOf: number[] = [];
+let identityOf: number[] = [];
+const unitFeature = (m: UnitMessage): StreamItem => ({
+  id: `u${m.id}`,
+  kind: 'milsym',
+  geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
+  props: { sidc: buildSidc(identityOf[m.id] ?? 0, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) },
+  meta: { hdg: m.hdg, birim: `${ENTITIES[entityOf[m.id] ?? 0]?.name} ${ECHELONS[echelonOf[m.id] ?? 0]?.name}` },
+});
+const stream = createLayerStream<UnitMessage>(store, {
+  layerId: UNITS,
+  format: STREAM_FORMAT.FULL,
+  normalize: (m) => {
+    if (m.identity !== undefined) identityOf[m.id] = m.identity;
+    return unitFeature(m);
+  },
+});
+const generator = new UnitGenerator((msgs) => stream.update(msgs));
+
+function startStream(): () => void {
+  const snapshot = generator.reset(COUNT);
+  entityOf = snapshot.map((m) => m.entity ?? 0);
+  echelonOf = snapshot.map((m) => m.echelon ?? 0);
+  identityOf = snapshot.map((m) => m.identity ?? 0);
+  store.transaction((tx) =>
+    tx.replaceLayerContents(UNITS, snapshot.map((m) => ({ ...(unitFeature(m) as Feature), layerId: UNITS }))),
+  );
+  generator.start();
+  return () => generator.stop();
+}
+
+// ── Bileşenler ───────────────────────────────────────────────────
+
+function useRenderCount(): number {
+  const count = useRef(0);
+  count.current++;
+  return count.current;
+}
+
+function UnitCard({ id }: { id: string }) {
+  const unit = useFeature(id);
+  const renders = useRenderCount();
+  if (!unit || unit.geometry.kind !== GEOMETRY_KIND.POINT) return null;
+  const [lon, lat] = unit.geometry.coord;
+  return (
+    <div className="unit-card">
+      <b>{id}</b> — {String(unit.meta?.birim)}
+      <div>
+        {lat.toFixed(4)}, {lon.toFixed(4)} · yön {Math.round(Number(unit.meta?.hdg))}°
+      </div>
+      <small>kart render: {renders}</small>
+    </div>
+  );
+}
+
+function SelectedOverlay() {
+  const { selected } = useSelection();
+  const id = [...selected][0];
+  const coord = useFeature(id ?? '', (f) => (f?.geometry.kind === GEOMETRY_KIND.POINT ? f.geometry.coord : undefined));
+  if (!id) return null;
+  return (
+    <MapOverlay anchor={coord} offset={[0, -24]}>
+      <UnitCard id={id} />
+    </MapOverlay>
+  );
+}
+
+function LayerToggle({ id, label }: { id: string; label: string }) {
+  const [visible, setVisible] = useLayerVisibility(id);
+  return (
+    <label>
+      {label}
+      <input type="checkbox" checked={visible ?? false} onChange={(e) => setVisible(e.target.checked)} />
+    </label>
+  );
+}
+
+function BasemapPicker() {
+  const store = useMapStore();
+  const basemaps = useBasemaps().filter((b) => b.exclusiveGroup);
+  const current = basemaps.find((b) => b.visible)?.id ?? '';
+  return (
+    <label>
+      Altlık
+      <select
+        value={current}
+        onChange={(e) => store.transaction((tx) => tx.patchBasemap(e.target.value, { visible: true }))}
+      >
+        {basemaps.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Panel() {
+  const map = useMap();
+  const renders = useRenderCount();
+  const [fps, setFps] = useState(0);
+  const [lastClick, setLastClick] = useState('—');
+  useMapEvent(MAP_EVENT.CLICK, (e) => setLastClick(e.featureId ?? 'boş'));
+
+  useEffect(() => {
+    let frames = 0;
+    let start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      frames++;
+      if (now - start >= 1000) {
+        setFps(Math.round((frames * 1000) / (now - start)));
+        frames = 0;
+        start = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <aside id="panel">
+      <h1>React testi — @c2/map-react</h1>
+      <p className="hint">
+        {COUNT.toLocaleString('tr-TR')} birlik, 1 Hz · <a href="./core.html">çekirdek sayfası</a>
+      </p>
+      <BasemapPicker />
+      <LayerToggle id="harekat" label="Harekât (kontrol tedbirleri)" />
+      <LayerToggle id={UNITS} label="Birlikler" />
+      <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9 })}>Ankara'ya uç</button>
+      <table>
+        <tbody>
+          <tr><td>FPS (sayfa)</td><td>{fps}</td></tr>
+          <tr><td>Panel render</td><td>{renders}</td></tr>
+          <tr><td>Son tıklama</td><td>{lastClick}</td></tr>
+        </tbody>
+      </table>
+    </aside>
+  );
+}
+
+function App() {
+  useEffect(startStream, []);
+  return (
+    <Map adapter={adapter} store={store} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
+      {BASEMAPS.map((b) => (
+        <MapBasemap key={b.id} {...b} />
+      ))}
+
+      <MapLayer id="harekat" name="Harekât" renderGroup>
+        <MapLayer id="kontrol" name="Kontrol tedbirleri">
+          <Polygon
+            id="fh-altin"
+            rings={[[[32.2, 39.6], [33.4, 39.6], [33.4, 40.3], [32.2, 40.3], [32.2, 39.6]]]}
+            style={{ fillColor: '#ffcc00', fillOpacity: 0.12, strokeColor: '#ffcc00' }}
+          />
+          <Polyline id="sinir-hatti" coords={[[31.5, 39.2], [33, 39.4], [34.5, 39.1]]} style={{ strokeColor: '#ff4d4d', strokeWidth: 3 }} />
+          <Circle id="hedef-bolge" center={[32.85, 39.93]} radiusM={15000} style={{ fillColor: '#ff4d4d', fillOpacity: 0.15 }} />
+        </MapLayer>
+      </MapLayer>
+
+      {/* Canlı birlikler: içi boş katman; unsurlar akıştan store'a */}
+      <MapLayer id={UNITS} name="Birlikler" renderGroup />
+
+      <SelectedOverlay />
+      <Panel />
+    </Map>
+  );
+}
+
+createRoot(document.getElementById('root')!).render(<App />);

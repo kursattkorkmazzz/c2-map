@@ -15,7 +15,8 @@ Tasarım: [09](../design/09-interaction-and-editing.md#etkileşim)
 - [ ] Bağlam menüsü (`contextmenu`)
 
 ## 2.2 `<MapOverlay>`
-- [ ] Koordinata sabit React DOM; `viewchange` + rAF ile konum
+Durum: ✅ — [Faz 1.4](phase-1-2d-mvp.md#14-c2map-react)'te öne alındı (seçili birlik kartı için)
+- [x] Koordinata sabit React DOM; konum her karede `adapter.project` ile DOM'a doğrudan (React render'ı yok). `viewchange` yalnız hareket bitince geldiği için kullanılmadı: kart haritayla birlikte kayar
 
 ## 2.3 Koordinat yardımcıları
 Tasarım: [08](../design/08-extensibility-symbology.md#koordinat-sistemleri)

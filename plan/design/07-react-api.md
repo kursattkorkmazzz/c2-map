@@ -5,8 +5,19 @@
 ## Kabuk
 
 - `<Map adapter initialView store? className onReady>` — container + `adapter.mount`; store
-  verilmezse kendi oluşturur. `ref` → imperatif API.
-- `useMap()` → `{ flyTo, fitBounds, getView, project, capabilities, store, adapter }`.
+  verilmezse üstteki `<MapStoreProvider>`'ınkini, o da yoksa kendi oluşturur. `ref` → imperatif API.
+- Store mount'u beklemez: çocuklar ilk render'dan itibaren store'a yazar; mount bitince MapSync
+  tam senkronla hepsini haritaya taşır.
+- `adapter.mount` asenkron: StrictMode'un mount → unmount → mount'unda veya mount sürerken
+  kapatılıp açılınca aynı adapter, önceki unmount bitmeden yeniden mount edilmez (adapter başına
+  söz zinciri).
+- `defaultInteractions` (varsayılan açık): tıklama → `select` / boşa tıklama → `clearSelection`,
+  enter/leave → `setHovered`. Global dinleyicidir: unsur veya katman dinleyicisi
+  `stopPropagation()` ile engeller.
+- `useMap()` → `{ ready, flyTo, setView, fitBounds, getView, getBounds, project, unproject, capabilities, store, adapter }`.
+  Mount bitmeden kamera çağrısı açık bir hata verir; `useMapReady()` / `onReady` ile beklenir.
+- `<MapStoreProvider store>`: harita dışındaki paneller (yan menü, LayerTree) store hook'larını
+  kullanabilsin. Olay hook'ları yalnız `<Map>` içinde (router haritaya aittir).
 
 ## Deklaratif bileşenler
 
@@ -16,10 +27,26 @@ Statik / az sayıda unsur için (kontrol tedbirleri, çizimler):
 - `<MapLayer id name visible opacity renderGroup>` — iç içe olabilir (grup = katman).
 - `<MapFeature id kind geometry style props />`, kısayollar `<Polygon>`, `<Polyline>`,
   `<Circle>`, `<Marker>`, `<MilSymbol>`, `<CompositeFeature>`.
-- `<MapOverlay anchor offset>` — koordinata sabit React DOM; konum `viewchange` + rAF ile.
+- `<MapOverlay anchor offset>` — koordinata sabit React DOM; konum her karede `adapter.project`
+  ile DOM'a doğrudan yazılır (React render'ı yok). `viewchange` yalnız hareket bitince geldiği
+  için yetmez.
 
-Bileşen mount'ta kendi id'sini store'a yazar, unmount'ta **yalnız o id'yi** siler.
-Kural: deklaratif bileşenler ile backend akışı aynı id'yi kullanmaz ([02](02-core-model.md#neden-featureorigin-yok)).
+Bileşen mount'ta kendi id'sini store'a yazar, unmount'ta **yalnız o id'yi** siler (katman: alt
+ağacıyla). Kural: deklaratif bileşenler ile backend akışı aynı id'yi kullanmaz ([02](02-core-model.md#neden-featureorigin-yok)).
+
+Yazma kuralları:
+
+- **Tek transaction:** bileşenler store'a doğrudan değil bir yazıcıya yazar; aynı commit'teki
+  tüm yazmalar bir mikro görevde tek transaction olur. React çocuk effect'ini ebeveyninkinden
+  önce çalıştırır; işlemler geliş sırasıyla tek seferde uygulandığı için sıra sorun olmaz.
+- **Yalnız değişen alan:** `<MapLayer>` / `<MapBasemap>` prop'u değişince yalnız değişen alanlar
+  `patch` ile yazılır. Kullanıcı katmanı LayerTree'den kapattıysa, başka bir prop (ad) değişti
+  diye `visible` prop'u o kararı ezmez. `<MapFeature>` tam upsert yazar; aynı içerik store'da
+  ayıklanır (satır içi `geometry={{…}}` haritaya iş göndermez).
+- **Kardeş sırası:** yeni katman kardeşlerinin sonuna eklenir; sonradan koşullu render edilen
+  katman JSX'teki yerine değil sona girer. Sıralama LayerTree / `tx.moveLayer` işidir ([Faz 1.6](../phases/phase-1.6-layer-tree.md)).
+- Kısayollar sabit kind adları kullanır (`BUILTIN_KIND`: `vector`, `marker`, `milsym`); stil
+  tipi motora özeldir, React paketi motor bilmez.
 
 ## Canlı veri
 
@@ -33,8 +60,11 @@ useEffect(() => connectUnitStream(socket, store, { layerId: "birlikler" }), [soc
 
 ## Hook'lar
 
-- `useFeature(id, selector?)`, `useLayer(id, selector?)`, `useLayerVisibility(id)`
-- `useSelection()` → `{ selected, select, toggle, clear }`
+- `useFeature(id, selector?, isEqual?)`, `useLayer(id, selector?, isEqual?)`, `useLayerVisibility(id)`
+  — `useSyncExternalStore` + id bazlı abonelik: 50k birlik akarken yalnız izlenen unsur değişince
+  render. Seçici sonucu kaynak referansına göre önbelleklenir (satır içi seçici serbest);
+  `isEqual` yeni nesne döndüren seçicide gereksiz render'ı keser.
+- `useSelection()` → `{ selected, select, toggle, clear }`, `useHovered()`, `useBasemaps()`
 - `useMapEvent / useLayerEvent / useFeatureEvent` (latest-ref deseni: callback değişince yeniden abone olunmaz)
 - `useMapDraw()` → `start(kind): Promise<Geometry>`, `cancel()`
 

@@ -1,0 +1,16 @@
+.unit-card {
+  transform: translate(-50%, -100%);
+  min-width: 180px;
+  padding: 6px 8px;
+  background: rgba(20, 24, 30, 0.92);
+  color: #e6e6e6;
+  border: 1px solid #9ad0ff;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+#panel button {
+  margin: 6px 0;
+}

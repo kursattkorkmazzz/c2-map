@@ -67,10 +67,17 @@ Durum: ✅ (kod: `packages/map-maplibre/src/deck/`, 36 test; gerçek tarayıcıd
 
 ## 1.4 `@c2/map-react`
 Tasarım: [07](../design/07-react-api.md)
-- [ ] `<Map>`, `useMap`, `useMapStore`
-- [ ] `<MapLayer>`, `<MapFeature>` + kısayollar, `<MapBasemap>`
-- [ ] `useFeature`, `useLayer`, `useLayerVisibility`, `useSelection`
-- [ ] `useMapEvent`, `useLayerEvent`, `useFeatureEvent` (latest-ref)
+Durum: ✅ (kod: `packages/map-react/`, 35 test; gerçek tarayıcıda `react.html`)
+- [x] `<Map>`, `useMap`, `useMapStore` (+ `useMapReady`, `<MapStoreProvider>`: harita dışındaki paneller için)
+- [x] `<Map>` yaşam döngüsü: StrictMode'un çift effect'i ve "mount sürerken kapat-aç" güvenli (aynı adapter'a önceki unmount bitmeden mount yok); `ResizeObserver` → `resize`; `VIEW_CHANGE` → `MapSync.setView`
+- [x] Varsayılan etkileşimler (`defaultInteractions`, açık): tıklama → seçim, üzerine gelme → hover; hedefli dinleyici `stopPropagation` ile engelleyebilir
+- [x] `<MapLayer>`, `<MapFeature>` + kısayollar (`Polygon`, `Polyline`, `Circle`, `Marker`, `MilSymbol`), `<MapBasemap>`
+- [x] Bildirimsel yazmalar mikro görevde TEK transaction; prop değişince yalnız değişen alan (LayerTree'deki görünürlük kararı ezilmez); unmount yalnız kendi id'sini siler
+- [x] `useFeature`, `useLayer` (seçici + `isEqual`), `useLayerVisibility`, `useSelection` (+ `useHovered`, `useBasemaps`)
+- [x] `useMapEvent`, `useLayerEvent`, `useFeatureEvent` (latest-ref)
+- [x] `<MapOverlay>` ([Faz 2.2](phase-2-interaction.md#22-mapoverlay)'den öne alındı)
+- [ ] (Sonraya) `<CompositeFeature>` → Faz 4 (composite kind ile); `useMapDraw` → [Faz 2.4](phase-2-interaction.md#24-çizim)
+- Tarayıcı doğrulaması (`react.html`, 3k birlik × 1 Hz, deck.gl): sayfa 112–120 FPS; panel akış sırasında render olmuyor; seçili birlik kartı yalnız o birlik değişince (~1/sn) render oluyor; katman kutucukları, altlık seçimi, `flyTo` çalışıyor
 
 ## 1.5 LayerTree → [Faz 1.6](phase-1.6-layer-tree.md)'ya taşındı
 
