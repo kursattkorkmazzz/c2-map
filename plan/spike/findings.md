@@ -90,3 +90,36 @@ Prototipte hiç ölçülmeyen:
 ## Gerçek paketlerle karşılaştırma
 
 _Faz 1.5'te doldurulacak: her senaryo için spike değeri ↔ gerçek boru hattı değeri._
+
+## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
+
+Faz 1.5.3'ün tarayıcı gerektirmeyen kısmı. `@c2/map-core` (store + MapSync), hiçbir şey çizmeyen
+sahte adapter ile; 50.000 birlik, 5 alt katman × 10k. Çalıştırma: `pnpm --filter @c2/map-core bench`.
+Ortam: Node 24.20, Windows x64 (geliştirici makinesi). İki çalıştırmanın aralığı verilmiştir.
+
+| Senaryo | Medyan (ms) | p95 (ms) | Bütçe (ms) | Sonuç |
+|---|---|---|---|---|
+| Store: 1 sn'lik akış (50k konum, 20 paket) | 51–54 | 60–71 | 100 / sn | ✓ ana thread'in ~%5'i |
+| Aynı akış + 200 unsur abonesi | 47–58 | 66–81 | 100 / sn | ✓ abonelerin maliyeti ihmal edilebilir |
+| MapSync flush: 5.000 değişen (%10, 10 Hz'de bir flush) | 2,1–2,2 | 3,6–**4,6** | 4 | ⚠ medyan rahat, p95 sınırda (GC) |
+| MapSync flush: 500 değişen (%1) | 0,2 | 0,2–0,4 | 4 | ✓ |
+| MapSync flush: 5.000 yalnız-META | 1,5–1,9 | 2,2–2,5 | 4 | ✓ ama boşa iş (aşağıda) |
+| 10k unsurlu katmanı kapat/aç | 4,3–4,7 | 9,0 | 16 | ✓ |
+| Katman taşı (50k tam değerlendirme) | 22–24 | 33–46 | 50 | ✓ nadir işlem |
+| 100 unsurluk seçim değişimi | 0,04 | 0,1 | 4 | ✓ |
+| MapSync ilk senkron (50k) | 25 | 40–44 | — | açılışta bir kez |
+| Store: 50k ilk yükleme | 83 | 109–117 | — | açılışta bir kez |
+| 10k snapshot, içerik aynı / %10 değişmiş | 4,2–4,4 / 5,1–5,4 | 8,6–12,5 / 6,4–10,3 | — | yeniden bağlanma |
+
+Çıkarımlar:
+
+1. **50k × 1 Hz'in çekirdekteki toplam maliyeti ≈ %7 ana thread:** store ~50 ms/sn + 10 flush × ~2 ms.
+   Spike'ın deck.gl modundaki ~3 ms/sn yalnız motoru besliyordu (gerçek store yoktu); fark çekirdeğin
+   (birleştirme, maske, `rev`, abonelik) maliyetidir. Kabul edilebilir; ölçümdeki store yükünün bir
+   kısmı patch nesnelerinin üretimidir (gerçekte JSON parse da üretir → Faz 3.6 Worker bunu ana thread'den alır).
+2. **Flush p95'i 4 ms sınırında.** Medyan yarısı kadar; kuyruk GC kaynaklı görünüyor. İyileştirme adayları:
+   `rendered` girdilerini yeniden kullanmak (nesne üretimini azaltmak), değerlendirme döngüsünde nesne yaratmamak.
+3. **Yalnız-META değişimi boşa ~1,5–2 ms harcıyor:** sonuç doğru (adapter'a hiçbir şey gitmiyor) ama MapSync
+   her unsur için katman çözümü ve karşılaştırma yapıyor. Katman değişikliği yoksa `VISUAL` biti olmayan
+   UPDATE'ler doğrudan atlanabilir (küçük ve güvenli bir değişiklik).
+4. Kullanıcı işlemleri (katman aç/kapa, taşıma, seçim) bir karenin içinde veya çok yakınında.

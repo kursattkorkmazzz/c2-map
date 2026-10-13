@@ -33,9 +33,17 @@ Her senaryo için spike değeri ile gerçek boru hattı yan yana yazılır.
 
 ## 1.5.3 Çekirdek maliyeti
 
-- [ ] Store: 50.000 mesaj/sn yazma maliyeti (transaction + günlük + abonelik bildirimi)
-- [ ] MapSync: 50k unsurda %10 değişimle flush süresi (hedef < 4 ms); katman aç/kapa ve katman taşıma (tam değerlendirme) süresi
-- [ ] React: 200 id bazlı abone varken (kart, tablo satırı) yeniden çizim sayısı
+Tarayıcı gerektirmeyen kısım Faz 1'den önce Node'da ölçüldü (`pnpm --filter @c2/map-core bench`,
+sonuçlar: [spike/findings.md](../spike/findings.md#çekirdek-ölçümü--node-motorsuz-2026-10-13)).
+
+- [x] Store: 50.000 mesaj/sn yazma maliyeti (transaction + günlük + abonelik bildirimi) — ~50 ms/sn (%5) ✓
+- [x] MapSync: 50k unsurda %10 değişimle flush süresi — medyan ~2,1 ms ✓, p95 3,6–4,6 ms ⚠ (bütçe 4 ms)
+- [x] Katman aç/kapa (10k) ~4,5 ms ve katman taşıma (50k tam değerlendirme) ~23 ms ✓
+- [x] Id bazlı abonelerin store yazma maliyetine etkisi (200 abone) — ihmal edilebilir ✓
+- [ ] İyileştirme: yalnız-META UPDATE'leri katman değişikliği yokken MapSync'te doğrudan atla (şu an ~1,5–2 ms boşa)
+- [ ] İyileştirme: flush p95'ini düşür (değerlendirme döngüsünde nesne üretimini azalt); sonra yeniden ölç
+- [ ] Aynı ölçümün tarayıcıda (V8 + gerçek adapter ile) tekrarı — Faz 1 sonrası
+- [ ] React: 200 id bazlı abone varken (kart, tablo satırı) yeniden çizim sayısı — `@c2/map-react` gerekli
 
 ## 1.5.4 MapLibre ve deck.gl ayrıntıları
 
