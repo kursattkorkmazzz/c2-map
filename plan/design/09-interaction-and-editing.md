@@ -124,6 +124,25 @@ oturumu**dur.
 4. Onay gelince taslak kalkar; asıl kayıt backend'den gelen yeni `rev` ile güncellenir.
    İptalde taslak atılır.
 
+### Düzenleme (Faz 2.5.2)
+
+- **Taslak store'da:** `tx.setDraft(feature)` ilk çağrıda asıl kaydı `base` olarak saklar;
+  `getEffectiveFeature` taslak varsa onu döner ve **MapSync bunu çizer**. Taslak varken akıştan
+  gelen güncelleme asıl kaydı değiştirir ama haritaya gitmez (META olarak abonelere gider) →
+  kullanıcının elinin altından kaymaz. `tx.clearDraft` haritayı asıl kaydın son hâline döndürür.
+  Unsur silinirse taslak da gider.
+- **Tutamaçlar çekirdekte** (`edit/handles.ts`, saf): köşe (`v:halka:i`), ara nokta (`m:halka:i`,
+  taşınınca köşe ekler), merkez, yarıçap, elips büyük / küçük ekseni, koridor genişliği,
+  dikdörtgen köşeleri (karşı köşe sabit). Çoklu geometriler düzenlenemez.
+- **`EditController`:** tıkla tut → imleçle canlı önizleme (adapter önizlemesi, store'a girmez) →
+  tıkla bırak → taslak (geri alma yığını). Backspace tutulan köşeyi siler; Esc bırakır / iptal
+  eder; Enter kaydeder. Çizimle aynı anda olmaz. Düzenlerken seçim / hover çalışmaz.
+- **Çakışma:** asıl kayıt `base`'den farklıysa `conflict: true` ("başkası değiştirdi").
+- **Kaydet:** `FeatureActions.update` → `beforeUpdate(next, prev)`: `next.rev` düzenlemeye başlanan
+  sürüm, `prev` store'daki güncel hâl — karar backend'in. Onayda taslak kalkar; ret / hatada
+  düzenleme sürer (hata panelde). Kanca yeni sürüm vermezse `rev` yazılmaz: eski rev ile
+  yazmak store'un "bayat mesaj" kuralına takılıp güncellemeyi düşürürdü.
+
 Modelde bunun için yalnız `Feature.rev` gerekir. **Karar #20 (2026-10-14): taslak store'da
 `drafts` haritasında yaşar** — motor bağımsız; MapSync taslağı olan unsur için taslağı çizer;
 React hook'ları taslağı okuyabilir; "başkası değiştirdi" uyarısı `rev` karşılaştırmasıyla.

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { DrawController, EventRouter, FeatureActions, MapAdapter, MapStore } from '@c2/map-core';
+import type { DrawController, EditController, EventRouter, FeatureActions, MapAdapter, MapStore } from '@c2/map-core';
 import type { DeclarativeWriter } from './declarative-writer';
 import type { MapHandle } from './map-handle';
 
@@ -13,6 +13,7 @@ export type MapContextValue = {
   ready: boolean;
   handle: MapHandle;
   draw: DrawController;
+  edit: EditController;
   /** İzinli ekle / güncelle / sil (bayrak + yaşam döngüsü). */
   actions: FeatureActions;
 };

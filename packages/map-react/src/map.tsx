@@ -9,6 +9,7 @@ import {
   BasemapProviderRegistry,
   createMapStore,
   DrawController,
+  EditController,
   EventRouter,
   FeatureActions,
   type FeatureLifecycle,
@@ -93,6 +94,7 @@ export function Map(props: MapProps) {
   const [router] = useState(() => new EventRouter(store));
   const [writer] = useState(() => new DeclarativeWriter(store));
   const [actions] = useState(() => new FeatureActions(store));
+  const edit = useMemo(() => new EditController({ store, actions, events: router, adapter }), [store, actions, router, adapter]);
   // Güncel kancalar (satır içi fonksiyon verilebilir): her render'dan sonra yenilenir.
   useEffect(() => actions.setLifecycle(props.lifecycle ?? {}));
   // Çizim araçları çekirdekte; adapter yalnız mod + önizleme sağlar (karar #8).
@@ -151,7 +153,8 @@ export function Map(props: MapProps) {
 
     return () => {
       active = false;
-      draw.cancel(); // adapter unmount olmadan önce: önizleme / mod temizlensin
+      draw.cancel(); // adapter unmount olmadan önce: önizleme / mod / taslak temizlensin
+      edit.cancel();
       readyRef.current = false;
       setReady(false);
       for (const off of detach.splice(0)) off();
@@ -164,45 +167,47 @@ export function Map(props: MapProps) {
       );
       lifecycle.set(adapter, done);
     };
-  }, [adapter, store, router, handle, draw]);
+  }, [adapter, store, router, handle, draw, edit]);
 
   // Varsayılan etkileşimler (global dinleyiciler: hedefli dinleyiciler stopPropagation ile engelleyebilir).
   useEffect(() => {
     if (!defaultInteractions) return;
-    // Çizim sürerken tıklama çizime aittir: seçim / hover yapılmaz.
+    // Çizim / düzenleme sürerken tıklama ona aittir: seçim / hover yapılmaz.
+    const busy = () => draw.isDrawing || edit.isEditing;
     const offs = [
       router.on(MAP_EVENT.CLICK, (e) => {
-        if (!draw.isDrawing) store.transaction((tx) => applyClickSelection(tx, e.featureId, e.modifiers));
+        if (!busy()) store.transaction((tx) => applyClickSelection(tx, e.featureId, e.modifiers));
       }),
       router.on(MAP_EVENT.POINTER_ENTER, (e) => {
-        if (!draw.isDrawing) store.transaction((tx) => tx.setHovered(e.featureId ?? null));
+        if (!busy()) store.transaction((tx) => tx.setHovered(e.featureId ?? null));
       }),
       router.on(MAP_EVENT.POINTER_LEAVE, () => store.transaction((tx) => tx.setHovered(null))),
     ];
     return () => offs.forEach((off) => off());
-  }, [defaultInteractions, router, store, draw]);
+  }, [defaultInteractions, router, store, draw, edit]);
 
-  // Çizim klavyesi: Esc iptal, Enter bitir, Backspace geri al (yazı alanındayken değil).
+  // Çizim / düzenleme klavyesi: Esc, Enter, Backspace / Delete (yazı alanındayken değil).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-      if (draw.key(e.key)) e.preventDefault();
+      const handled = edit.isEditing ? edit.key(e.key) : draw.key(e.key);
+      if (handled) e.preventDefault();
     };
     const sync = () => {
-      if (draw.isDrawing) document.addEventListener('keydown', onKey);
+      if (draw.isDrawing || edit.isEditing) document.addEventListener('keydown', onKey);
       else document.removeEventListener('keydown', onKey);
     };
-    const off = draw.subscribe(sync);
+    const offs = [draw.subscribe(sync), edit.subscribe(sync)];
     return () => {
-      off();
+      offs.forEach((off) => off());
       document.removeEventListener('keydown', onKey);
     };
-  }, [draw]);
+  }, [draw, edit]);
 
   const context = useMemo<MapContextValue>(
-    () => ({ store, router, adapter, writer, ready, handle, draw, actions }),
-    [store, router, adapter, writer, ready, handle, draw, actions],
+    () => ({ store, router, adapter, writer, ready, handle, draw, edit, actions }),
+    [store, router, adapter, writer, ready, handle, draw, edit, actions],
   );
 
   return (

@@ -20,7 +20,6 @@ import {
   type Bounds,
   type CameraView,
   type DrawPreview,
-  type EditSession,
   type Feature,
   type FeatureKindRegistry,
   type FeatureStatePatch,
@@ -383,10 +382,6 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       if (state.kinds.has(kind)) throw new Error(`"${kind}" renderer'ı kullanımdayken değiştirilemez.`);
     }
     this.renderers.set(kind, candidate as MaplibreKindRenderer);
-  }
-
-  editFeature(): EditSession {
-    throw new Error('Düzenleme Faz 2\'de eklenecek.');
   }
 
   // ── Gruplar ────────────────────────────────────────────────────

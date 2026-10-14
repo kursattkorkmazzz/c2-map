@@ -31,6 +31,10 @@ export type DrawPreview = {
   vertices: readonly LngLat[];
   /** Yardımcı çizgiler (yarıçap, elips eksenleri). */
   guides: readonly (readonly LngLat[])[];
+  /** Düzenlemede ara nokta tutamaçları (taşınınca köşe eklenir). */
+  midpoints?: readonly LngLat[];
+  /** Düzenlemede tutulan tutamaç. */
+  active?: LngLat | null;
 };
 
 export const EMPTY_PREVIEW: DrawPreview = { shape: null, vertices: [], guides: [] };

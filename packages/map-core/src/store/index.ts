@@ -18,6 +18,7 @@ export type { BasemapPatch, FeaturePatch, LayerPatch } from "./diff";
 export {
   createMapStore,
   SELECT_MODE,
+  type FeatureDraft,
   type MapStore,
   type MapStoreOptions,
   type MapStoreStats,

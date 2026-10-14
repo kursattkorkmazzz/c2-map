@@ -9,7 +9,6 @@ import type { LngLat } from "../model/geometry";
 import type { MapEventInput, MapEventSink } from "../events/event-router";
 import type {
   AdapterRenderer,
-  EditSession,
   FeatureVisualState,
   MapAdapter,
   MapCapabilities,
@@ -141,10 +140,6 @@ export class MockAdapter implements MapAdapter<null> {
 
   setDrawPreview(preview: DrawPreview | null): void {
     this.drawPreview = preview;
-  }
-
-  editFeature(_id: string): EditSession {
-    throw new Error("MockAdapter düzenleme desteklemiyor.");
   }
 
   // ── Test yardımcıları ──────────────────────────────────────────

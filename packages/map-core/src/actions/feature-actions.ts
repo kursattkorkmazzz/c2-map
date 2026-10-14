@@ -133,7 +133,13 @@ export class FeatureActions {
     if (this.pending.has(next.id)) return ACTION_RESULT.BUSY;
     const decision = await this.ask(next.id, () => this.lifecycle.beforeUpdate?.(next, prev) ?? true);
     if (decision === false) return ACTION_RESULT.REJECTED;
-    const final = decision === true ? next : decision;
+    // Kanca yeni sürüm vermediyse `rev` yazılmaz: `next.rev` düzenlemenin başladığı (eski) sürüm
+    // olabilir ve store onu "eski mesaj" sayıp düşürürdü. Backend yeni rev'i akışla / dönüşle verir.
+    let final: Feature;
+    if (decision === true) {
+      const { rev: _startedFrom, ...rest } = next;
+      final = rest;
+    } else final = decision;
     this.store.transaction((tx) => tx.upsertFeatures([final]));
     return ACTION_RESULT.DONE;
   }

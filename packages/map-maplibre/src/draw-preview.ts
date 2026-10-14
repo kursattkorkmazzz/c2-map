@@ -16,7 +16,7 @@ export const DRAW_PREVIEW_SOURCE = 'c2-draw-preview';
 /** Önizlemenin en alttaki katmanı: operasyonel katmanların üst sınırı (çapa). */
 export const DRAW_ANCHOR_LAYER = 'c2-draw-fill';
 
-const ROLE = { SHAPE: 'shape', GUIDE: 'guide', VERTEX: 'vertex' } as const;
+const ROLE = { SHAPE: 'shape', GUIDE: 'guide', VERTEX: 'vertex', MIDPOINT: 'midpoint', ACTIVE: 'active' } as const;
 const COLOR = '#ffcc00';
 const role = (value: string) => ['==', ['get', 'role'], value];
 
@@ -49,6 +49,22 @@ export const DRAW_PREVIEW_LAYERS = [
     filter: role(ROLE.VERTEX),
     paint: { 'circle-radius': 4, 'circle-color': '#ffffff', 'circle-stroke-color': COLOR, 'circle-stroke-width': 2 },
   },
+  {
+    // Düzenleme: ara nokta (taşınınca köşe eklenir) — köşeden küçük, yarı saydam
+    id: 'c2-draw-midpoint',
+    type: 'circle',
+    source: DRAW_PREVIEW_SOURCE,
+    filter: role(ROLE.MIDPOINT),
+    paint: { 'circle-radius': 3, 'circle-color': COLOR, 'circle-opacity': 0.6, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
+  },
+  {
+    // Düzenleme: tutulan tutamaç
+    id: 'c2-draw-active',
+    type: 'circle',
+    source: DRAW_PREVIEW_SOURCE,
+    filter: role(ROLE.ACTIVE),
+    paint: { 'circle-radius': 7, 'circle-color': COLOR, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
+  },
 ] as unknown as LayerSpecification[];
 
 export const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -61,8 +77,9 @@ export function previewToGeoJSON(preview: DrawPreview | null): GeoJSON.FeatureCo
     if (guide.length < 2) continue;
     features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: guide.map((c) => [...c]) }, properties: { role: ROLE.GUIDE } });
   }
-  for (const v of preview.vertices) {
-    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [...v] }, properties: { role: ROLE.VERTEX } });
-  }
+  const point = (c: readonly number[], r: string): GeoJSON.Feature => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [...c] }, properties: { role: r } });
+  for (const v of preview.vertices) features.push(point(v, ROLE.VERTEX));
+  for (const m of preview.midpoints ?? []) features.push(point(m, ROLE.MIDPOINT));
+  if (preview.active) features.push(point(preview.active, ROLE.ACTIVE));
   return { type: 'FeatureCollection', features };
 }

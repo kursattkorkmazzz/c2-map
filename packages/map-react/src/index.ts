@@ -32,5 +32,6 @@ export {
 } from './hooks/store-hooks';
 export { useFeatureEvent, useLayerEvent, useMapEvent } from './hooks/event-hooks';
 export { useMapDraw, type MapDrawApi } from './hooks/use-map-draw';
+export { useMapEdit, type MapEditApi } from './hooks/use-map-edit';
 export { useFeatureActions, useFeaturePermissions } from './hooks/use-feature-actions';
 export { DRAW_TOOL_LABELS, DrawToolbar, type DrawToolbarProps } from './components/draw-toolbar';

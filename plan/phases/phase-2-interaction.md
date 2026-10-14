@@ -1,6 +1,6 @@
 # Faz 2 — Etkileşim, çizim ve düzenleme
 
-← [Plan ana sayfası](../README.md) · Durum: ⬜ · Önkoşul: Faz 1
+← [Plan ana sayfası](../README.md) · Durum: ✅ (2.1–2.5; "Sonraya" maddeleri açık) · Önkoşul: Faz 1
 
 **Amaç:** Operasyonel etkileşim: seçim, hover, bağlam menüsü, overlay, çizim ve güvenli düzenleme.
 
@@ -58,8 +58,14 @@ Tasarım: [09](../design/09-interaction-and-editing.md#izinler-ve-yaşam-döngü
 - [x] `<DrawToolbar layerId>`: çizim `beforeCreate`'ten geçerek eklenir
 - [x] Tarayıcı (`react.html`, sahte backend): birlikte "Sil" yok; çizim backend id'siyle eklenir; silme onayla / retle; bekleme sırasında harita değişmez
 
-### 2.5.2 Düzenleme (taslak)
-- [ ] Taslak (draft) mekanizması — asıl kayıt backend'den güncellenirken taslak etkilenmez
-- [ ] "Başkası değiştirdi" tespiti (`rev` karşılaştırması)
-- [ ] Kaydet: başlangıç `rev`'i ile gönder; onayda taslağı kaldır; iptalde at
-- [ ] `editFeature(id)` / `EditSession`
+### 2.5.2 Düzenleme (taslak) ✅
+Tasarım: [09](../design/09-interaction-and-editing.md#düzenleme-faz-252)
+- [x] Taslak (draft) store'da (`tx.setDraft` / `clearDraft`, `getDraft`, `getEffectiveFeature`); MapSync taslağı çizer; akış asıl kaydı günceller, taslak kaymaz (haritaya gitmez, abonelere gider); unsur silinince taslak da gider
+- [x] "Başkası değiştirdi" tespiti: asıl kayıt düzenleme başındaki hâlinden (`base`) farklı → `conflict`; panelde uyarı + "Yine de kaydet"
+- [x] Kaydet: `beforeUpdate(next, prev)` — `next.rev` başlangıç sürümü, `prev` güncel hâl; onayda taslak kalkar, retle / hatada düzenleme sürer; iptalde atılır. Kanca yeni rev vermezse `rev` yazılmaz (eski rev "bayat" sayılıp düşmesin — bulunan hata)
+- [x] Tutamaçlar çekirdekte (`handlesOf` / `moveHandle` / `removeHandle`): köşe, ara nokta (köşe ekler), merkez, yarıçap, elips eksenleri, koridor genişliği, dikdörtgen köşeleri; çoklu geometriler düzenlenemez
+- [x] `EditController`: tıkla tut → canlı önizleme → tıkla bırak; geri al; Backspace köşe sil; Esc bırak / iptal; Enter kaydet; çizimle birbirini dışlar; düzenlerken seçim / hover yok
+- [x] Adapter sözleşmesinden `editFeature` / `EditSession` kaldırıldı (düzenleme çekirdekte; adapter yalnız önizleme: ara nokta + tutulan tutamaç)
+- [x] React: `useMapEdit()`, `<DrawToolbar>` düzenleme paneli (Kaydet / Geri al / İptal, çakışma ve hata uyarıları)
+- [x] Tarayıcı (`react.html`): sağ tık "Düzenle" → köşe taşı, köşe ekle → Enter → sahte backend rev 2; Esc ile iptal eski hâle döner; birlikte "Düzenle" yok
+- [ ] (Sonraya) Stil / özellik düzenleme (şimdilik yalnız geometri); sürükleyerek taşıma; tüm şekli kaydırma

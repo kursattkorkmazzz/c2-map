@@ -19,6 +19,7 @@ import {
 import type { CSSProperties, ReactNode } from 'react';
 import { useFeatureActions } from '../hooks/use-feature-actions';
 import { useMapDraw } from '../hooks/use-map-draw';
+import { useMapEdit } from '../hooks/use-map-edit';
 
 const defaultId = () =>
   `draw-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
@@ -142,6 +143,8 @@ export function DrawToolbar({
         })}
       </div>
 
+      {!draw.state && <EditPanel />}
+
       {draw.state && (
         <div role="status" data-c2-draw-panel="" style={styles.panel}>
           <div style={styles.title}>{labels?.[draw.state.tool] ?? DRAW_TOOL_LABELS[draw.state.tool]}</div>
@@ -163,6 +166,46 @@ export function DrawToolbar({
           <div style={styles.keys}>Enter bitir · Backspace geri al · Esc iptal</div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Düzenleme sürerken: ipucu, uyarılar, Kaydet / Geri al / İptal. */
+function EditPanel() {
+  const edit = useMapEdit();
+  const state = edit.state;
+  if (!state) return null;
+  const save = () => void edit.save().catch(() => {}); // hata durumu panelde (state.error)
+  return (
+    <div role="status" data-c2-edit-panel="" style={styles.panel}>
+      <div style={styles.title}>Düzenleniyor</div>
+      <div>{state.hint}</div>
+      {state.conflict && (
+        <div role="alert" data-conflict="" style={styles.warning}>
+          Bu unsur siz düzenlerken başka biri tarafından değiştirildi. Kaydederseniz onun değişikliğinin üzerine yazılabilir.
+        </div>
+      )}
+      {state.error && (
+        <div role="alert" style={styles.warning}>
+          {state.error === 'rejected'
+            ? 'Kaydetme reddedildi.'
+            : state.error === 'denied'
+              ? 'Bu unsuru düzenleme izniniz yok.'
+              : 'Kaydetme başarısız oldu.'}
+        </div>
+      )}
+      <div style={styles.actions}>
+        <button type="button" onClick={save} disabled={!state.dirty || state.saving || state.deleted} style={styles.action}>
+          {state.saving ? 'Kaydediliyor…' : state.conflict ? 'Yine de kaydet' : 'Kaydet'}
+        </button>
+        <button type="button" onClick={edit.undo} disabled={!state.canUndo || state.saving} style={styles.action}>
+          Geri al
+        </button>
+        <button type="button" onClick={edit.cancel} disabled={state.saving} style={styles.action}>
+          İptal
+        </button>
+      </div>
+      <div style={styles.keys}>Enter kaydet · Backspace köşe sil / geri al · Esc bırak / iptal</div>
     </div>
   );
 }
@@ -241,6 +284,7 @@ const styles = {
     cursor: 'pointer',
   },
   keys: { marginTop: 6, fontSize: 10, opacity: 0.6 },
+  warning: { marginTop: 6, padding: '4px 6px', borderRadius: 4, background: 'rgba(255, 128, 0, 0.15)', color: '#ffb366' },
 } satisfies Record<string, CSSProperties>;
 
 const svg = (children: ReactNode) => (

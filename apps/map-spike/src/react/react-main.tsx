@@ -44,6 +44,7 @@ import {
   useFeaturePermissions,
   useLayerVisibility,
   useMap,
+  useMapEdit,
   useMapEvent,
   useMapStore,
   useSelection,
@@ -143,6 +144,14 @@ const lifecycle: FeatureLifecycle = {
     report(`${saved.id} kaydedildi`);
     return saved;
   },
+  // Düzenleme: `next.rev` düzenlemeye başlanan sürüm, `prev` güncel hâl → çakışmaya backend karar verir.
+  async beforeUpdate(next, prev) {
+    report(`${next.id} kaydediliyor…`);
+    await wait(400);
+    const saved = { ...next, rev: (prev.rev ?? 0) + 1 };
+    report(`${next.id} kaydedildi (rev ${saved.rev})`);
+    return saved;
+  },
   // Silme: backend'de yetki + silme; onay gelince haritadan kalkar.
   async beforeDelete(feature) {
     report(`${feature.id} siliniyor…`);
@@ -194,7 +203,8 @@ function ContextMenu({ featureId, coord, close }: ContextMenuState) {
   const { select } = useSelection();
   const actions = useFeatureActions();
   // "Sil" izinden gelir: birlikler katmanı deletable={false}; çizimler ve kontrol tedbirleri açık.
-  const { canDelete, pending } = useFeaturePermissions(featureId ?? '');
+  const { canDelete, canEdit, pending } = useFeaturePermissions(featureId ?? '');
+  const edit = useMapEdit();
   const drawingTool = useFeature(featureId ?? '', (f) => (f?.layerId === DRAWINGS ? String(f.meta?.tool ?? '') : null));
   const run = (action: () => void) => () => {
     action();
@@ -207,6 +217,7 @@ function ContextMenu({ featureId, coord, close }: ContextMenuState) {
         <>
           {drawingTool === null && <button onClick={run(() => select(featureId, SELECT_MODE.ADD))}>Seçime ekle</button>}
           <button onClick={run(() => coord && map.flyTo({ center: coord, zoom: 10 }))}>Merkeze al</button>
+          {canEdit && !pending && <button onClick={run(() => edit.start(featureId))}>Düzenle</button>}
           {canDelete && (
             <button className="danger" disabled={pending} onClick={run(() => void actions.delete(featureId))}>
               {pending ? 'Siliniyor…' : 'Sil'}

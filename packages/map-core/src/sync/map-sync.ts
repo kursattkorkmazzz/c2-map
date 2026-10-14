@@ -186,7 +186,7 @@ export class MapSync {
     remove: string[],
     state: Map<string, Partial<FeatureVisualState>>,
   ): void {
-    const feature = this.store.getFeature(id);
+    const feature = this.store.getEffectiveFeature(id); // düzenleniyorsa taslak
     const prev = this.rendered.get(id);
     const layer = feature && !feature.hidden ? this.resolver.get(feature.layerId) : null;
 

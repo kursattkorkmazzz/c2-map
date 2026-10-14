@@ -408,6 +408,8 @@ describe('çizim: mod + önizleme (araçlar çekirdekte)', () => {
       ['guide', 'LineString'],
       ['vertex', 'Point'],
     ]);
+    adapter.setDrawPreview({ shape: null, vertices: [], guides: [], midpoints: [[32, 39]], active: [32.01, 39] });
+    expect(map.getSource('c2-draw-preview')!.data!.features.map((f) => f.properties!.role)).toEqual(['midpoint', 'active']);
     adapter.setDrawPreview(null);
     expect(map.getSource('c2-draw-preview')!.data!.features).toEqual([]);
   });

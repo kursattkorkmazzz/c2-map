@@ -134,14 +134,6 @@ export interface RenderContextBase {
  */
 export type AdapterRenderer<_TEngine = unknown> = object;
 
-// ── Düzenleme (Faz 2.5'te çizim gibi çekirdeğe taşınacak) ─────────
-
-export interface EditSession {
-  readonly featureId: string;
-  readonly finished: Promise<Geometry | null>;
-  cancel(): void;
-}
-
 // ── Adapter ──────────────────────────────────────────────────────
 
 export type MountOptions = {
@@ -177,10 +169,10 @@ export interface MapAdapter<TEngine = unknown> {
 
   registerRenderer(kind: string, renderer: AdapterRenderer<TEngine>): void;
 
-  // Çizim (capabilities.draw). Araçlar çekirdekte (`DrawController`, karar #8); adapter yalnız:
+  // Çizim + düzenleme (capabilities.draw). Araçlar ve tutamaçlar çekirdekte (`DrawController`,
+  // `EditController`, karar #8); adapter yalnız:
   /** Çizim modu: çift tık zoom'u kapat, imleç artı; unsur hover imleci gösterilmez. */
   setDrawMode(active: boolean): void;
   /** Anlık önizleme (store dışında, hemen çizilir). `null` → temizle. */
   setDrawPreview(preview: DrawPreview | null): void;
-  editFeature(id: string): EditSession;
 }

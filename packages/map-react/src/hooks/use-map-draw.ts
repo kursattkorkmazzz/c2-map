@@ -22,7 +22,7 @@ export type MapDrawApi = {
 };
 
 export function useMapDraw(): MapDrawApi {
-  const { draw, ready } = useMapContext('useMapDraw');
+  const { draw, edit, ready } = useMapContext('useMapDraw');
   const subscribe = useCallback((cb: () => void) => draw.subscribe(cb), [draw]);
   const getState = useCallback(() => draw.getState(), [draw]);
   const state = useSyncExternalStore(subscribe, getState, getState);
@@ -31,13 +31,14 @@ export function useMapDraw(): MapDrawApi {
     () => ({
       start: (tool: DrawToolKind, options?: DrawToolOptions) => {
         if (!ready) return Promise.reject(new Error('Harita henüz hazır değil; çizim başlatılamaz.'));
+        edit.cancel(); // çizim ve düzenleme aynı anda olmaz
         return draw.start(tool, options).result;
       },
       finish: () => draw.finish(),
       undo: () => draw.undo(),
       cancel: () => draw.cancel(),
     }),
-    [draw, ready],
+    [draw, edit, ready],
   );
   return useMemo(() => ({ state, ...actions }), [state, actions]);
 }

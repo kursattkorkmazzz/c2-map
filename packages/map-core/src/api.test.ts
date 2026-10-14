@@ -51,6 +51,12 @@ describe("@c2/map-core genel API", () => {
         // actions
         "ACTION_RESULT",
         "FeatureActions",
+        // edit
+        "EditController",
+        "HANDLE_KIND",
+        "handlesOf",
+        "moveHandle",
+        "removeHandle",
         // draw
         "DRAW_TOOL",
         "DrawController",

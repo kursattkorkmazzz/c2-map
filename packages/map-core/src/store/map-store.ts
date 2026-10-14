@@ -11,7 +11,7 @@
 import type { Basemap } from "../model/basemap";
 import type { Feature } from "../model/feature";
 import type { Layer } from "../model/layer";
-import { BASEMAP_CHANGE, CHANGE_OP, LAYER_CHANGE, type ChangeOp, type ChangeSet } from "./change";
+import { BASEMAP_CHANGE, CHANGE_OP, FEATURE_CHANGE, LAYER_CHANGE, type ChangeOp, type ChangeSet } from "./change";
 import { ChangeJournal, ENTITY_KIND } from "./change-journal";
 import {
   diffBasemap,
@@ -102,7 +102,24 @@ export interface MapTx {
   clearSelection(): void;
   /** Fare altındaki unsur. Store'da olmayan id (ör. sentetik küme) yok sayılır. */
   setHovered(id: string | null): void;
+
+  /**
+   * Düzenleme taslağı (karar #20). Taslak varken haritada taslak çizilir; asıl kayıt akıştan
+   * güncellenmeye devam eder (taslak kaymaz). İlk `setDraft` asıl kaydın o anki hâlini taban
+   * (`base`) olarak saklar. Store'da olmayan id yok sayılır.
+   */
+  setDraft(feature: Feature): void;
+  /** Taslağı atar; harita asıl kayda döner. */
+  clearDraft(id: string): void;
 }
+
+/** Düzenlenen unsurun taslağı. */
+export type FeatureDraft = {
+  /** Kullanıcının düzenlediği hâl (haritada bu çizilir). */
+  readonly feature: Feature;
+  /** Düzenleme başladığında asıl kayıt. Asıl kayıt bundan farklıysa "başkası değiştirdi". */
+  readonly base: Feature;
+};
 
 export const SELECT_MODE = {
   REPLACE: "replace",
@@ -133,6 +150,10 @@ export interface MapStore {
   getHovered(): string | null;
   /** Unsurun son yazılma zamanı (bayatlık hesabı için). */
   getUpdatedAt(featureId: string): number | undefined;
+  /** Düzenleme taslağı (yoksa `undefined`). Değişimi `subscribeFeature` ile gelir. */
+  getDraft(featureId: string): FeatureDraft | undefined;
+  /** Haritada görünen hâl: taslak varsa taslak, yoksa asıl kayıt (MapSync bunu çizer). */
+  getEffectiveFeature(featureId: string): Feature | undefined;
   readonly stats: MapStoreStats;
 
   // yazma
@@ -268,6 +289,9 @@ class MapStoreImpl implements MapStore {
   private readonly now: () => number;
   private readonly mutableStats = { droppedStale: 0, ignoredPatches: 0, rejectedSnapshotItems: 0 };
 
+  /** Düzenleme taslakları (unsur id → taslak). */
+  private readonly drafts = new Map<string, FeatureDraft>();
+
   /** Açık transaction derinliği (iç içe çağrılar için). */
   private depth = 0;
   private readonly tx: MapTx;
@@ -304,10 +328,20 @@ class MapStoreImpl implements MapStore {
       select: (ids, mode) => this.guard(() => this.select(ids, mode)),
       clearSelection: () => this.guard(() => this.applySelection(EMPTY_SET)),
       setHovered: (id) => this.guard(() => this.setHovered(id)),
+      setDraft: (feature) => this.guard(() => this.setDraft(feature)),
+      clearDraft: (id) => this.guard(() => this.clearDraft(id)),
     };
   }
 
   // ── Okuma ──────────────────────────────────────────────────────
+
+  getDraft(id: string): FeatureDraft | undefined {
+    return this.drafts.get(id);
+  }
+
+  getEffectiveFeature(id: string): Feature | undefined {
+    return this.drafts.get(id)?.feature ?? this.features.get(id);
+  }
 
   getFeature(id: string): Feature | undefined {
     return this.features.get(id);
@@ -526,6 +560,7 @@ class MapStoreImpl implements MapStore {
       this.unindexFeature(prev.layerId, id);
       this.updatedAt.delete(id);
       this.revs.delete(id);
+      this.drafts.delete(id); // düzenlenen unsur silindi: taslak da gider (düzenleyici bunu görür)
 
       if (this.selection.has(id)) {
         const next = new Set(this.selection);
@@ -591,7 +626,31 @@ class MapStoreImpl implements MapStore {
       this.indexFeature(next.layerId, next.id);
     }
     this.features.set(next.id, next);
-    this.recordFeature(next.id, CHANGE_OP.UPDATE, mask);
+    // Taslak varken haritada taslak durur: asıl kayıttaki değişiklik çizilmez, yalnız abonelere
+    // (çakışma uyarısı) gider. Taslak atılınca harita asıl kaydın son hâline döner.
+    this.recordFeature(next.id, CHANGE_OP.UPDATE, this.drafts.has(next.id) ? FEATURE_CHANGE.META : mask);
+  }
+
+  private setDraft(feature: Feature): void {
+    const stored = this.features.get(feature.id);
+    if (!stored) return;
+    const current = this.drafts.get(feature.id);
+    const shown = current?.feature ?? stored;
+    const next = stabilizeFeature(shown, feature);
+    this.drafts.set(feature.id, { feature: next, base: current?.base ?? stored });
+    const mask = diffFeature(shown, next);
+    // İçerik aynı olsa da aboneler haber almalı (ör. düzenleme başladı).
+    this.recordFeature(feature.id, CHANGE_OP.UPDATE, mask === 0 ? FEATURE_CHANGE.META : mask);
+  }
+
+  private clearDraft(id: string): void {
+    const draft = this.drafts.get(id);
+    if (!draft) return;
+    this.drafts.delete(id);
+    const stored = this.features.get(id);
+    if (!stored) return;
+    const mask = diffFeature(draft.feature, stored);
+    this.recordFeature(id, CHANGE_OP.UPDATE, mask === 0 ? FEATURE_CHANGE.META : mask);
   }
 
   /** Gelen `rev` mevcut olandan eski veya eşitse true (ve sayaç artar). */
