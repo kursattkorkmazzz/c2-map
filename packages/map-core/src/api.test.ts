@@ -48,7 +48,16 @@ describe("@c2/map-core genel API", () => {
         // ingest
         "STREAM_FORMAT",
         "createLayerStream",
+        // draw
+        "DRAW_TOOL",
+        "DrawController",
+        "EMPTY_PREVIEW",
+        "createDrawTool",
+        "distanceToPolyline",
         // geo
+        "corridorRing",
+        "ellipseRing",
+        "shapeRings",
         "COORD_FORMAT",
         "HEMISPHERES",
         "UTM_BANDS",

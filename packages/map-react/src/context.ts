@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { EventRouter, MapAdapter, MapStore } from '@c2/map-core';
+import type { DrawController, EventRouter, MapAdapter, MapStore } from '@c2/map-core';
 import type { DeclarativeWriter } from './declarative-writer';
 import type { MapHandle } from './map-handle';
 
@@ -12,6 +12,7 @@ export type MapContextValue = {
   /** Adapter mount edildi ve MapSync çalışıyor. */
   ready: boolean;
   handle: MapHandle;
+  draw: DrawController;
 };
 
 export const MapContext = createContext<MapContextValue | null>(null);

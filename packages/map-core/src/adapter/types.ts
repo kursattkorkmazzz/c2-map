@@ -9,6 +9,7 @@ import type { Basemap, BasemapSourceType } from "../model/basemap";
 import type { Bounds, CameraView } from "../model/camera";
 import type { Feature } from "../model/feature";
 import type { Geometry, GeometryKind, LngLat } from "../model/geometry";
+import type { DrawPreview } from "../draw/types";
 import type { MapEventSink } from "../events/event-router";
 import type { BasemapProviderRegistry } from "../registry/basemap-provider-registry";
 import type { FeatureKindRegistry } from "../registry/feature-kind-registry";
@@ -133,16 +134,7 @@ export interface RenderContextBase {
  */
 export type AdapterRenderer<_TEngine = unknown> = object;
 
-// ── Çizim / düzenleme (Faz 2'de doldurulacak) ────────────────────
-
-export type DrawOptions = Record<string, unknown>;
-
-export interface DrawSession {
-  readonly kind: GeometryKind;
-  /** Kullanıcı çizimi bitirince geometri, iptal edilirse `null`. */
-  readonly finished: Promise<Geometry | null>;
-  cancel(): void;
-}
+// ── Düzenleme (Faz 2.5'te çizim gibi çekirdeğe taşınacak) ─────────
 
 export interface EditSession {
   readonly featureId: string;
@@ -185,7 +177,10 @@ export interface MapAdapter<TEngine = unknown> {
 
   registerRenderer(kind: string, renderer: AdapterRenderer<TEngine>): void;
 
-  // Çizim (capabilities.draw) — Faz 2
-  startDraw(kind: GeometryKind, options?: DrawOptions): DrawSession;
+  // Çizim (capabilities.draw). Araçlar çekirdekte (`DrawController`, karar #8); adapter yalnız:
+  /** Çizim modu: çift tık zoom'u kapat, imleç artı; unsur hover imleci gösterilmez. */
+  setDrawMode(active: boolean): void;
+  /** Anlık önizleme (store dışında, hemen çizilir). `null` → temizle. */
+  setDrawPreview(preview: DrawPreview | null): void;
   editFeature(id: string): EditSession;
 }

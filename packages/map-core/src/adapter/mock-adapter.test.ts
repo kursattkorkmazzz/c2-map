@@ -121,10 +121,14 @@ describe("MockAdapter", () => {
     expect(adapter.unproject(adapter.project([3, 4]))).toEqual([3, 4]);
   });
 
-  it("yetenekler varsayılan + üzerine yazılabilir; çizim desteklenmez", () => {
-    const adapter = new MockAdapter({ draw: false, models3d: true });
+  it("yetenekler varsayılan + üzerine yazılabilir; çizim modu / önizleme kaydedilir", () => {
+    const adapter = new MockAdapter({ models3d: true });
     expect(adapter.capabilities.models3d).toBe(true);
     expect(adapter.capabilities.featureState).toBe(true);
-    expect(() => adapter.startDraw(GEOMETRY_KIND.POLYGON)).toThrow(/desteklemiyor/);
+    expect(adapter.capabilities.draw).toBe(true);
+    adapter.setDrawMode(true);
+    adapter.setDrawPreview({ shape: { kind: GEOMETRY_KIND.POINT, coord: [1, 2] }, vertices: [], guides: [] });
+    expect(adapter.drawMode).toBe(true);
+    expect(adapter.drawPreview?.shape).toEqual({ kind: "point", coord: [1, 2] });
   });
 });

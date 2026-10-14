@@ -13,6 +13,7 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BASEMAP_ANCHOR_LAYER, MaplibreAdapter, type MapInit } from './adapter';
 import { toSourceSpec, urlPrefix } from './basemaps';
+import { DRAW_PREVIEW_LAYERS } from './draw-preview';
 import { FakeMap } from './testing/fake-map';
 
 const xyz = (id: string, over: Partial<Basemap> = {}): Basemap => ({
@@ -103,7 +104,7 @@ describe('toSourceSpec', () => {
 describe('altlık katmanları', () => {
   it('çapanın ALTINA, order\'a göre (küçük alta) eklenir; ekleme sırası önemsiz', () => {
     adapter.applyBatch({ basemaps: { upsert: [xyz('ust', { order: 2 }), xyz('alt', { order: 0 }), xyz('orta', { order: 1 })], remove: [] } });
-    expect(map.layerOrder()).toEqual(['c2-bm-alt', 'c2-bm-orta', 'c2-bm-ust', BASEMAP_ANCHOR_LAYER]);
+    expect(map.layerOrder()).toEqual(['c2-bm-alt', 'c2-bm-orta', 'c2-bm-ust', BASEMAP_ANCHOR_LAYER, ...DRAW_PREVIEW_LAYERS.map((l) => l.id)]);
   });
 
   it('operasyonel katmanlar her zaman altlıkların üstünde', () => {

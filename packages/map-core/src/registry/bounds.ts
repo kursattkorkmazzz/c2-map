@@ -42,17 +42,31 @@ export function geometryBounds(geometry: Geometry): Bounds | null {
       add(geometry.min);
       add(geometry.max);
       break;
-    case GEOMETRY_KIND.CIRCLE: {
-      // Yaklaşık (küresel) dönüşüm: yarıçap metre → derece. Kutu hesabı için yeterli.
-      const [lon, lat] = geometry.center;
-      const dLat = geometry.radiusM / M_PER_DEG_LAT;
-      const dLon = geometry.radiusM / (M_PER_DEG_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 1e-6));
-      add([lon - dLon, lat - dLat]);
-      add([lon + dLon, lat + dLat]);
+    case GEOMETRY_KIND.CIRCLE:
+      addAround(geometry.center, geometry.radiusM, add);
       break;
+    case GEOMETRY_KIND.ELLIPSE:
+      addAround(geometry.center, Math.max(geometry.semiMajorM, geometry.semiMinorM), add);
+      break;
+    case GEOMETRY_KIND.CORRIDOR:
+      for (const c of geometry.coords) addAround(c, geometry.widthM / 2, add);
+      break;
+    default: {
+      // Yeni bir geometri türü eklenince derleyici burada uyarsın.
+      const unhandled: never = geometry;
+      void unhandled;
     }
   }
 
   if (minLon === Infinity) return null;
   return { min: [minLon, minLat], max: [maxLon, maxLat] };
+}
+
+/** Noktanın çevresinde `radiusM` metrelik kare. Yaklaşık (küresel) metre → derece; kutu için yeterli. */
+function addAround(center: LngLat, radiusM: number, add: (c: LngLat) => void): void {
+  const [lon, lat] = center;
+  const dLat = radiusM / M_PER_DEG_LAT;
+  const dLon = radiusM / (M_PER_DEG_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 1e-6));
+  add([lon - dLon, lat - dLat]);
+  add([lon + dLon, lat + dLat]);
 }

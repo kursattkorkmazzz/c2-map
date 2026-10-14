@@ -25,6 +25,7 @@ import {
 import { createMaplibreAdapter, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
 import {
   Circle,
+  DrawToolbar,
   Map,
   MapBasemap,
   MapContextMenu,
@@ -115,6 +116,25 @@ function startStream(): () => void {
   );
   generator.start();
   return () => generator.stop();
+}
+
+// ── Çizimler ─────────────────────────────────────────────────────
+
+let drawingCount = 0;
+function saveDrawing(geometry: Feature['geometry'], tool: string): void {
+  const id = `cizim-${++drawingCount}`;
+  store.transaction((tx) =>
+    tx.upsertFeatures([
+      {
+        id,
+        layerId: 'cizimler',
+        kind: 'vector',
+        geometry,
+        style: { fillColor: '#4dd0e1', fillOpacity: 0.2, strokeColor: '#4dd0e1', strokeWidth: 2, pointColor: '#4dd0e1' },
+        meta: { tool },
+      },
+    ]),
+  );
 }
 
 // ── Bileşenler ───────────────────────────────────────────────────
@@ -315,6 +335,10 @@ function App() {
           <Circle id="hedef-bolge" center={[32.85, 39.93]} radiusM={15000} style={{ fillColor: '#ff4d4d', fillOpacity: 0.15 }} />
         </MapLayer>
       </MapLayer>
+
+      {/* Kullanıcı çizimleri: araç çubuğundan gelen geometri store'a (uygulamanın kararı) */}
+      <MapLayer id="cizimler" name="Çizimler" />
+      <DrawToolbar onComplete={saveDrawing} />
 
       {/* Canlı birlikler: içi boş katman; unsurlar akıştan store'a */}
       <MapLayer id={UNITS} name="Birlikler" renderGroup />

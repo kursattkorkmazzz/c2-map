@@ -22,7 +22,7 @@ export type { DeckIcon } from './deck/deck-group';
 export { MOTION_MODE, MotionGovernor, type MotionAutoOptions, type MotionMode } from './deck/motion';
 export { SUPPORTED_BASEMAP_SOURCES, toSourceSpec, type BasemapStats } from './basemaps';
 export { STANDARD_PROPS, type EncodedPart, type PropertyValue } from './encode';
-export { circleRing, representativePoint, toGeoJSONGeometry } from './geometry';
+export { representativePoint, toGeoJSONGeometry } from './geometry';
 export type { GeoJSONSourceLike, MapImage, MapLike } from './map-like';
 export { defaultMarkerRenderer, markerRenderer, type MarkerRendererOptions, type MarkerStyle } from './renderers/marker';
 export {

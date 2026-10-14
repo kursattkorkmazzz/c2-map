@@ -19,7 +19,7 @@ import {
   type AdapterRenderer,
   type Bounds,
   type CameraView,
-  type DrawSession,
+  type DrawPreview,
   type EditSession,
   type Feature,
   type FeatureKindRegistry,
@@ -36,6 +36,7 @@ import {
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
 import { DeckController, loadDeckModules, type DeckKindRenderer, type DeckModules, type DeckTiming } from './deck/deck-controller';
 import { MOTION_MODE, type MotionAutoOptions, type MotionMode } from './deck/motion';
+import { DRAW_ANCHOR_LAYER, DRAW_PREVIEW_LAYERS, DRAW_PREVIEW_SOURCE, EMPTY_COLLECTION, previewToGeoJSON } from './draw-preview';
 import { BasemapController, SUPPORTED_BASEMAP_SOURCES, type BasemapStats } from './basemaps';
 import { partId, SourceDiffBuilder, STANDARD_PROPS, diffPart, type StoredPart } from './encode';
 import type { MapImage, MapLike, GeoJSONSourceLike } from './map-like';
@@ -137,6 +138,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
 
   private map: MapLike | null = null;
   private deck: DeckController | null = null;
+  private drawMode = false;
   private basemaps: BasemapController | null = null;
   private events: MapEventSink | null = null;
   private kinds: FeatureKindRegistry | null = null;
@@ -160,7 +162,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       terrain: false,
       models3d: false,
       clustering: false,
-      draw: false,
+      draw: true,
       featureState: true,
       supportedFeatureKinds: [...new Set([...this.renderers.keys(), ...this.deckRenderers.keys()])],
       supportedBasemapSources: SUPPORTED_BASEMAP_SOURCES,
@@ -207,6 +209,9 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     this.map = map;
 
     map.addLayer({ id: BASEMAP_ANCHOR_LAYER, type: 'background', layout: { visibility: 'none' } });
+    // Çizim önizlemesi en üstte, kalıcı; ilk katmanı operasyonel katmanların üst çapası.
+    map.addSource(DRAW_PREVIEW_SOURCE, { type: 'geojson', data: EMPTY_COLLECTION });
+    for (const layer of DRAW_PREVIEW_LAYERS) map.addLayer(layer);
     this.basemaps = new BasemapController(map, options.basemapProviders, BASEMAP_ANCHOR_LAYER);
 
     const resolveImage = this.options.resolveImage;
@@ -355,6 +360,20 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
     this.deck?.flush();
   }
 
+  // ── Çizim (araçlar çekirdekte; burada yalnız mod + önizleme) ──
+
+  setDrawMode(active: boolean): void {
+    const map = this.requireMap();
+    this.drawMode = active;
+    if (active) map.doubleClickZoom.disable();
+    else map.doubleClickZoom.enable();
+    map.getCanvas().style.cursor = active ? 'crosshair' : '';
+  }
+
+  setDrawPreview(preview: DrawPreview | null): void {
+    (this.requireMap().getSource(DRAW_PREVIEW_SOURCE) as GeoJSONSourceLike).setData(previewToGeoJSON(preview));
+  }
+
   registerRenderer(kind: string, renderer: AdapterRenderer<MapLike>): void {
     const candidate = renderer as Partial<MaplibreKindRenderer>;
     if (typeof candidate.layers !== 'function' || typeof candidate.encode !== 'function') {
@@ -364,10 +383,6 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       if (state.kinds.has(kind)) throw new Error(`"${kind}" renderer'ı kullanımdayken değiştirilemez.`);
     }
     this.renderers.set(kind, candidate as MaplibreKindRenderer);
-  }
-
-  startDraw(): DrawSession {
-    throw new Error('Çizim Faz 2\'de eklenecek.');
   }
 
   editFeature(): EditSession {
@@ -398,7 +413,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   private restack(): void {
     const map = this.requireMap();
     const ordered = [...this.groups.values()].sort((a, b) => a.group.order - b.group.order);
-    for (const state of ordered) for (const layerId of state.layerIds) map.moveLayer(layerId);
+    for (const state of ordered) for (const layerId of state.layerIds) map.moveLayer(layerId, DRAW_ANCHOR_LAYER);
   }
 
   private removeGroup(id: string): void {
@@ -433,12 +448,13 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   }
 
   /**
-   * `order`'dan büyük en yakın grubun en alttaki katmanı (yeni katmanlar onun altına girer).
+   * `order`'dan büyük en yakın grubun en alttaki katmanı (yeni katmanlar onun altına girer); yoksa
+   * çizim önizlemesinin çapası (operasyonel katmanlar hep önizlemenin altında).
    * `withDeck`: üst grubun yalnız deck.gl katmanı varsa onun MapLibre'deki taşıyıcısı da sayılır. deck
    * katmanlarının kendi `beforeId`'si yalnız MapLibre katmanlarına bakar: deck.gl aynı `beforeId`'li
    * katmanları tek taşıyıcıda topladığından, taşıyıcıya göre konumlanmak döngüsel olurdu.
    */
-  private firstLayerAbove(order: number, withDeck: boolean): string | undefined {
+  private firstLayerAbove(order: number, withDeck: boolean): string {
     const map = this.requireMap();
     let best: { order: number; id: string } | undefined;
     for (const state of this.groups.values()) {
@@ -450,7 +466,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       }
       if (id !== undefined) best = { order: state.group.order, id };
     }
-    return best?.id;
+    return best?.id ?? DRAW_ANCHOR_LAYER;
   }
 
   // ── Unsurlar ───────────────────────────────────────────────────
@@ -607,7 +623,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       if (hovered !== undefined) emit({ type: MAP_EVENT.POINTER_LEAVE, featureId: hovered });
       hovered = next;
       if (next !== undefined) emit({ type: MAP_EVENT.POINTER_ENTER, featureId: next });
-      map.getCanvas().style.cursor = next === undefined ? '' : 'pointer';
+      if (!this.drawMode) map.getCanvas().style.cursor = next === undefined ? '' : 'pointer';
     };
     on('mousemove', (e) => {
       if (pending === null) {

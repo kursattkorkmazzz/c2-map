@@ -30,13 +30,21 @@ Durum: ✅ (kod: `packages/map-core/src/geo/`, 24 test; tarayıcıda `react.html
 - [x] DD / DM / DMS biçimleri, İngilizce (N S E W) veya Türkçe (K G D B) yön harfleri
 - [x] `parseCoordinate`: serbest metin (MGRS / UTM / DD / DM / DMS, virgüllü ondalık, enlem önce)
 - [x] Mesafe / yön / hedef nokta / çizgi uzunluğu / poligon alanı (delikli) / jeodezik daire — `geographiclib-geodesic`
-- [ ] (Sonraya) Kutuplar (UPS, |enlem| > 80–84°) kapsam dışı; MapLibre adapter'ın daire poligonu `geodesicCircle`'a geçirilebilir
+- [ ] (Sonraya) Kutuplar (UPS, |enlem| > 80–84°) kapsam dışı. (MapLibre'nin daire poligonu 2.4'te çekirdeğin jeodezik `shapeRings`'ine geçirildi.)
 
 ## 2.4 Çizim
-- [ ] Kütüphane entegrasyonu (adapter `startDraw`, `capabilities.draw`)
-- [ ] Nokta / çizgi / poligon / daire (merkez + yarıçap) / dikdörtgen
-- [ ] `useMapDraw()`
-- [ ] `DRAW_UPDATE` / `DRAW_COMPLETE` olayları
+Tasarım: [09](../design/09-interaction-and-editing.md#çizim-mimarisi-öneri) (karar #8: B)
+Durum: ✅ (çekirdek `draw/` + `geo/shapes.ts`, MapLibre `draw-preview.ts`, React `<DrawToolbar>` / `useMapDraw`; gerçek tarayıcıda `react.html` ile 7 araç)
+- [x] Model: `CORRIDOR` (orta çizgi + genişlik) ve `ELLIPSE` (merkez, iki yarı eksen, yön) geometrileri; backend'den gelenler de çizilir
+- [x] Jeodezik şekil → poligon (`shapeRings`: daire, elips, koridor, dikdörtgen) çekirdekte; MapLibre bunları kullanır (kendi küresel dairesi kaldırıldı)
+- [x] Araçlar çekirdekte, saf durum makineleri: nokta / çizgi / poligon / daire / dikdörtgen / koridor / elips; tıklama tabanlı (sürükleme yok → kaydırma kilidi gerekmedi)
+- [x] `DrawController`: router olayları → araç → önizleme; Esc / Enter / Backspace; tek çizim; `DRAW_UPDATE` / `DRAW_COMPLETE`
+- [x] Adapter sözleşmesi: `startDraw` kalktı → `setDrawMode` (çift tık zoom kapalı, artı imleç) + `setDrawPreview`
+- [x] MapLibre önizlemesi: kalıcı en üst katmanlar (çapa) — deck.gl dahil tüm operasyonel katmanlar altında kalır
+- [x] React: `useMapDraw()` (promise), `<DrawToolbar>` (kütüphane UI'ı: araçlar, ipucu, canlı ölçüm, Bitir / Geri al / İptal); çizim sürerken varsayılan seçim / hover kapalı
+- [x] Tarayıcı hatası düzeltildi: araç çubuğunun dış kutusu panelin altındaki boşlukta haritaya giden tıklamaları yutuyordu (`pointer-events`)
+- [ ] (Sonraya) Snapping (köşeye / unsura yapışma), sürükleyerek çizim, askeri kontrol tedbiri araçları (ok, faz hattı) — gerekince yeni araç olarak çekirdeğe
+- [ ] (Sonraya) Araç çubuğu Faz 2.5'te düzenleme moduyla genişleyecek
 
 ## 2.5 Düzenleme ve eşzamanlılık
 Tasarım: [09](../design/09-interaction-and-editing.md#düzenleme-ve-eşzamanlılık)

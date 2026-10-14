@@ -18,7 +18,10 @@ import {
 } from '@c2/map-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BASEMAP_ANCHOR_LAYER, MaplibreAdapter } from './adapter';
+import { DRAW_PREVIEW_LAYERS } from './draw-preview';
 import { FakeMap } from './testing/fake-map';
+
+const DRAW_LAYERS = DRAW_PREVIEW_LAYERS.map((l) => l.id);
 
 const container = {} as HTMLElement;
 
@@ -75,7 +78,7 @@ beforeEach(async () => {
 
 describe('mount', () => {
   it('altlık çapası eklenir; başlangıç görünümü harita üreticisine gider', async () => {
-    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER]);
+    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER, ...DRAW_LAYERS]);
     const createMap = vi.fn(async () => new FakeMap());
     const a = new MaplibreAdapter({ createMap, workerUrl: '/w.mjs' });
     await a.mount(container, {
@@ -102,10 +105,10 @@ describe('gruplar ve katmanlar', () => {
   it('grup → promoteId\'li GeoJSON kaynağı; kind ilk kez görününce katmanları eklenir', () => {
     adapter.applyBatch({ groups: { upsert: [{ id: 'g1', layerId: 'g1', order: 0 }], remove: [] } });
     expect(source().spec).toMatchObject({ type: 'geojson', promoteId: '_id' });
-    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER]); // henüz kind yok
+    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER, ...DRAW_LAYERS]); // henüz kind yok
 
     adapter.applyBatch({ features: { upsert: [rf(polygon('p1'))], remove: [] } });
-    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER, 'c2-g1-vector-fill', 'c2-g1-vector-line', 'c2-g1-vector-point']);
+    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER, 'c2-g1-vector-fill', 'c2-g1-vector-line', 'c2-g1-vector-point', ...DRAW_LAYERS]);
   });
 
   it('gruplar sırayla dizilir; alttaki gruba sonradan eklenen kind üstteki grubun altına girer', () => {
@@ -144,7 +147,7 @@ describe('gruplar ve katmanlar', () => {
       features: { upsert: [rf(polygon('p1'))], remove: [] },
     });
     adapter.applyBatch({ features: { upsert: [], remove: ['p1'] }, groups: { upsert: [], remove: ['g1'] } });
-    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER]);
+    expect(map.layerOrder()).toEqual([BASEMAP_ANCHOR_LAYER, ...DRAW_LAYERS]);
     expect(map.getSource('c2-src-g1')).toBeUndefined();
   });
 });
@@ -372,5 +375,52 @@ describe('uçtan uca: store → MapSync → MaplibreAdapter → kaynak', () => {
     store.transaction((tx) => tx.patchLayer('kontrol', { visible: false }));
     scheduler.run();
     expect(src.features.size).toBe(0);
+  });
+});
+
+describe('çizim: mod + önizleme (araçlar çekirdekte)', () => {
+  it('mod: çift tık zoom kapanır, imleç artı; hover imleci ezmez; kapatınca geri gelir', async () => {
+    adapter.applyBatch({
+      groups: { upsert: [{ id: 'g1', layerId: 'g1', order: 0 }], remove: [] },
+      features: { upsert: [rf(marker('m1', 1))], remove: [] },
+    });
+    adapter.setDrawMode(true);
+    expect(map.doubleClickZoom.isEnabled()).toBe(false);
+    expect(map.canvas.style.cursor).toBe('crosshair');
+    map.hits = [{ layer: 'c2-g1-marker-dot', fid: 'm1' }];
+    map.fire('mousemove', { point: { x: 1, y: 1 }, lngLat: { lng: 1, lat: 39 } });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(map.canvas.style.cursor).toBe('crosshair');
+    adapter.setDrawMode(false);
+    expect(map.doubleClickZoom.isEnabled()).toBe(true);
+    expect(map.canvas.style.cursor).toBe('');
+  });
+
+  it('önizleme: şekil + yardımcı çizgi + köşeler tek kaynağa; null → boş', () => {
+    adapter.setDrawPreview({
+      shape: { kind: GEOMETRY_KIND.CIRCLE, center: [32, 39], radiusM: 1000 },
+      vertices: [[32, 39]],
+      guides: [[[32, 39], [32.01, 39]]],
+    });
+    const data = map.getSource('c2-draw-preview')!.data!;
+    expect(data.features.map((f) => [f.properties!.role, f.geometry.type])).toEqual([
+      ['shape', 'Polygon'],
+      ['guide', 'LineString'],
+      ['vertex', 'Point'],
+    ]);
+    adapter.setDrawPreview(null);
+    expect(map.getSource('c2-draw-preview')!.data!.features).toEqual([]);
+  });
+
+  it('önizleme katmanları hep en üstte: sonradan eklenen grup / yeniden dizme altına girer; hit-test\'e girmez', () => {
+    adapter.applyBatch({
+      groups: { upsert: [{ id: 'g1', layerId: 'g1', order: 5 }], remove: [] },
+      features: { upsert: [rf(polygon('p1'))], remove: [] },
+    });
+    adapter.applyBatch({ groups: { upsert: [{ id: 'g1', layerId: 'g1', order: 0 }, { id: 'g2', layerId: 'g2', order: 9 }], remove: [] } });
+    adapter.applyBatch({ features: { upsert: [rf(polygon('p2'), { groupId: 'g2' })], remove: [] } });
+    expect(map.layerOrder().slice(-DRAW_LAYERS.length)).toEqual(DRAW_LAYERS);
+    map.fire('click', { point: { x: 1, y: 1 }, lngLat: { lng: 0, lat: 0 } });
+    expect(map.lastQueryLayers.some((id) => id.startsWith('c2-draw-'))).toBe(false);
   });
 });

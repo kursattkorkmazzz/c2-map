@@ -67,7 +67,7 @@ useEffect(() => connectUnitStream(socket, store, { layerId: "birlikler" }), [soc
 - `useSelection()` → `{ selected, select, toggle, clear }`, `useHovered()`, `useBasemaps()`
 - `<MapTooltip>`, `<MapContextMenu>` (başsız) — [09](09-interaction-and-editing.md#etkileşim)
 - `useMapEvent / useLayerEvent / useFeatureEvent` (latest-ref deseni: callback değişince yeniden abone olunmaz)
-- `useMapDraw()` → `start(kind): Promise<Geometry>`, `cancel()`
+- `useMapDraw()` → `{ state, start(tool, options?): Promise<Geometry | null>, finish, undo, cancel }`; `<DrawToolbar>` — [09](09-interaction-and-editing.md#uygulama-faz-24)
 
 ```tsx
 <Map adapter={adapter} initialView={{ center: [27.1, 38.4], zoom: 10 }} className="h-full">

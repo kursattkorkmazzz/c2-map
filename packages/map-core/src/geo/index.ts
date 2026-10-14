@@ -12,6 +12,7 @@ export {
   type Utm,
 } from "./utm";
 export { parseMgrs, toMgrs, type MgrsOptions, type MgrsPoint } from "./mgrs";
+export { corridorRing, ellipseRing, shapeRings } from "./shapes";
 export {
   COORD_FORMAT,
   formatAngle,

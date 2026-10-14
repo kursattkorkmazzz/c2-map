@@ -68,6 +68,17 @@ export function geometryEqual(a: Geometry, b: Geometry): boolean {
       return Object.is(a.radiusM, (b as typeof a).radiusM) && coordEqual(a.center, (b as typeof a).center);
     case GEOMETRY_KIND.RECTANGLE:
       return coordEqual(a.min, (b as typeof a).min) && coordEqual(a.max, (b as typeof a).max);
+    case GEOMETRY_KIND.CORRIDOR:
+      return Object.is(a.widthM, (b as typeof a).widthM) && listEqual(a.coords, (b as typeof a).coords, coordEqual);
+    case GEOMETRY_KIND.ELLIPSE: {
+      const c = b as typeof a;
+      return (
+        Object.is(a.semiMajorM, c.semiMajorM) &&
+        Object.is(a.semiMinorM, c.semiMinorM) &&
+        Object.is(a.rotationDeg, c.rotationDeg) &&
+        coordEqual(a.center, c.center)
+      );
+    }
   }
 }
 

@@ -12,6 +12,8 @@ import type {
 
 export interface GeoJSONSourceLike {
   updateData(diff: GeoJSONSourceDiff): unknown;
+  /** Tüm içeriği değiştir (yalnız küçük kaynaklar: çizim önizlemesi). */
+  setData(data: GeoJSON.FeatureCollection): unknown;
 }
 
 /** Görüntü kaynağı: `map.addImage`'in kabul ettiği türler. */
@@ -57,6 +59,9 @@ export interface MapLike {
   getBounds(): { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
   project(lngLat: [number, number]): { x: number; y: number };
   unproject(point: [number, number]): { lng: number; lat: number };
+
+  // Etkileşim işleyicileri (çizimde çift tık zoom kapatılır)
+  readonly doubleClickZoom: { enable(): unknown; disable(): unknown; isEnabled(): boolean };
 
   // Kontroller (deck.gl MapLibreOverlay bir IControl'dür)
   addControl(control: any): unknown;

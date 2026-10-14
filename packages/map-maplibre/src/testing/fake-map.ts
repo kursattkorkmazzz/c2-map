@@ -13,6 +13,13 @@ export class FakeSource {
 
   constructor(readonly spec: SourceSpecification) {}
 
+  /** Son `setData` içeriği (önizleme kaynağı). */
+  data: GeoJSON.FeatureCollection | null = null;
+
+  setData(data: GeoJSON.FeatureCollection): void {
+    this.data = data;
+  }
+
   updateData(diff: GeoJSONSourceDiff): void {
     this.diffs.push(diff);
     // MapLibre sırası: remove → add → update
@@ -230,6 +237,19 @@ export class FakeMap implements MapLike {
   getCanvas() {
     return this.canvas;
   }
+
+  readonly doubleClickZoom = {
+    enabled: true,
+    enable() {
+      this.enabled = true;
+    },
+    disable() {
+      this.enabled = false;
+    },
+    isEnabled() {
+      return this.enabled;
+    },
+  };
 
   readonly controls: unknown[] = [];
 

@@ -4,11 +4,11 @@
 
 import type { Basemap } from "../model/basemap";
 import type { Bounds, CameraView } from "../model/camera";
-import type { GeometryKind, LngLat } from "../model/geometry";
+import type { DrawPreview } from "../draw/types";
+import type { LngLat } from "../model/geometry";
 import type { MapEventInput, MapEventSink } from "../events/event-router";
 import type {
   AdapterRenderer,
-  DrawSession,
   EditSession,
   FeatureVisualState,
   MapAdapter,
@@ -24,7 +24,7 @@ export const MOCK_CAPABILITIES: MapCapabilities = {
   terrain: false,
   models3d: false,
   clustering: false,
-  draw: false,
+  draw: true,
   featureState: true,
   supportedFeatureKinds: ["vector", "marker", "milsym", "composite"],
   supportedBasemapSources: ["xyz", "wmts", "wms", "tilejson", "vector-style", "image"],
@@ -130,8 +130,17 @@ export class MockAdapter implements MapAdapter<null> {
     this.renderers.set(kind, renderer);
   }
 
-  startDraw(_kind: GeometryKind): DrawSession {
-    throw new Error("MockAdapter çizim desteklemiyor.");
+  /** Çizim modu açık mı (test gözlemi). */
+  drawMode = false;
+  /** Son önizleme (test gözlemi); `null` = temiz. */
+  drawPreview: DrawPreview | null = null;
+
+  setDrawMode(active: boolean): void {
+    this.drawMode = active;
+  }
+
+  setDrawPreview(preview: DrawPreview | null): void {
+    this.drawPreview = preview;
   }
 
   editFeature(_id: string): EditSession {

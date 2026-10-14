@@ -35,6 +35,44 @@ Sözleşme çekirdekte, uygulama adapter'da: `MapAdapter.startDraw(kind) → Dra
 - B'de de bir motor kütüphanesi (ör. terra-draw) aynı `DrawSession` sözleşmesini uygulayan
   alternatif olarak adapter içine takılabilir.
 
+### Uygulama (Faz 2.4)
+
+- **Araçlar** (`map-core/src/draw/tools.ts`): saf durum makineleri; girdi tık / hareket / bitir /
+  geri al, çıktı önizleme + ölçüm + ipucu + sonuç geometrisi. Etkileşim **tıklama tabanlı**:
+  sürükleme olmadığı için harita kaydırmasıyla çakışmaz, adapter'dan kaydırma kilidi istenmez,
+  dokunmatikte de aynı çalışır.
+
+  | Araç | Adımlar | Sonuç |
+  |---|---|---|
+  | nokta | tıkla | `POINT` |
+  | çizgi | tıkla … → çift tık / Enter | `LINE` |
+  | poligon | tıkla … → ilk köşe / çift tık / Enter | `POLYGON` |
+  | daire | merkez → yarıçap | `CIRCLE` |
+  | dikdörtgen | köşe → karşı köşe | `RECTANGLE` |
+  | elips | merkez → büyük eksen (uzunluk + yön) → küçük eksen | `ELLIPSE` |
+  | koridor | orta çizgi → genişlik (fareyle; `corridorWidthM` ile atlanır) | `CORRIDOR` |
+
+- **`DrawController`**: EventRouter'dan CLICK / DBLCLICK / POINTER_MOVE alır; çift tıkın ikinci
+  tıkı ekranda 4 px içindeyse yok sayılır. Klavye UI'dan `key()` ile (Esc iptal, Enter bitir,
+  Backspace geri al). Aynı anda tek çizim. Sonuç `Promise<Geometry | null>`; ne yapılacağı
+  (store'a yaz / backend'e gönder) uygulamanın kararı.
+- **Sapma (önizleme store dışında):** B'de "çizilen şekil store'da taslak" denmişti. Önizleme
+  imleç hızında değişir; store yolu MapSync'in 10 Hz sınırına takılır, sık flush ise 50k birlik
+  akışının maliyetini artırırdı. Bu yüzden önizleme adapter'a doğrudan gider
+  (`setDrawPreview`, tek küçük kaynak). Store taslağı (#20) düzenleme (2.5) içindir.
+- **Adapter sözleşmesi:** `setDrawMode(active)` (MapLibre: çift tık zoom kapalı, artı imleç,
+  hover imleci ezilmez) + `setDrawPreview(preview | null)`.
+- **MapLibre katman sırası:** önizleme katmanları mount'ta en üste kalıcı eklenir ve **çapa**
+  olur; tüm operasyonel katmanlar ve deck.gl taşıyıcıları onun altına girer. (deck.gl'in "son"
+  taşıyıcısı her güncellemede kendini en üste taşır; çapa olmadan çizimi örterdi.)
+- **React:** `useMapDraw()` → `{ state, start, finish, undo, cancel }`; `<DrawToolbar>` kütüphane
+  UI'ı (araç düğmeleri, ipucu, canlı ölçüm, Bitir / Geri al / İptal; `tools`, `labels`,
+  `toolOptions`, `position`, `onComplete`). Çizim sürerken `<Map>`'in varsayılan seçim / hover'ı
+  çalışmaz. Askeri semboller gibi backend'den gelen kind'ler araç çubuğunda yoktur.
+- **Dikkat (iki kez yaşandı):** haritanın üstündeki DOM kutularının boş kısımları tıklamayı yutar
+  (`<MapOverlay>`, `<DrawToolbar>`). Kural: kaplayan kutu `pointer-events: none`, yalnız görünen
+  parçalar `auto`.
+
 ## Çizim kütüphanesi
 
 Aday: **terra-draw** (MIT, motor-bağımsız, MapLibre adapter'ı var; nokta/çizgi/poligon/daire/

@@ -1,11 +1,9 @@
 // ── Çekirdek geometrisi → GeoJSON ────────────────────────────────
-// GeoJSON'da daire ve dikdörtgen yoktur: ikisi de poligona çevrilir. Daire jeodezik olarak
-// (küre üzerinde gerçek metre yarıçapıyla) üretilir → zoom'dan bağımsız doğru boyut.
+// GeoJSON'da daire, elips, koridor ve dikdörtgen yoktur: hepsi poligona çevrilir. Çevirme
+// çekirdeğin jeodezik şekil fonksiyonlarıyla (`shapeRings`) yapılır → gerçek metre, zoom'dan
+// bağımsız doğru boyut; diğer motorlarla aynı sonuç.
 
-import { GEOMETRY_KIND, type Geometry, type LngLat } from '@c2/map-core';
-
-const EARTH_RADIUS_M = 6_371_008.8;
-const CIRCLE_SEGMENTS = 64;
+import { GEOMETRY_KIND, shapeRings, type Geometry, type LngLat } from '@c2/map-core';
 
 const position = (c: LngLat): GeoJSON.Position => [...c];
 const positions = (cs: readonly LngLat[]): GeoJSON.Position[] => cs.map(position);
@@ -24,37 +22,20 @@ export function toGeoJSONGeometry(geometry: Geometry): GeoJSON.Geometry {
       return { type: 'Polygon', coordinates: geometry.rings.map(positions) };
     case GEOMETRY_KIND.MULTI_POLYGON:
       return { type: 'MultiPolygon', coordinates: geometry.polygons.map((rings) => rings.map(positions)) };
-    case GEOMETRY_KIND.RECTANGLE: {
-      const [x0, y0] = geometry.min;
-      const [x1, y1] = geometry.max;
-      return { type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] };
-    }
+    case GEOMETRY_KIND.RECTANGLE:
     case GEOMETRY_KIND.CIRCLE:
-      return { type: 'Polygon', coordinates: [circleRing(geometry.center, geometry.radiusM)] };
+    case GEOMETRY_KIND.ELLIPSE:
+    case GEOMETRY_KIND.CORRIDOR:
+      return { type: 'Polygon', coordinates: (shapeRings(geometry) ?? []).map(positions) };
   }
-}
-
-/** Merkezden `radiusM` metre uzaklıktaki noktalar (küresel hedef nokta formülü), kapalı halka. */
-export function circleRing(center: LngLat, radiusM: number, segments = CIRCLE_SEGMENTS): GeoJSON.Position[] {
-  const toRad = Math.PI / 180;
-  const lat1 = center[1] * toRad;
-  const lon1 = center[0] * toRad;
-  const d = radiusM / EARTH_RADIUS_M;
-  const ring: GeoJSON.Position[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const bearing = ((i % segments) / segments) * 2 * Math.PI;
-    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing));
-    const lon2 =
-      lon1 + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
-    ring.push([lon2 / toRad, lat2 / toRad]);
-  }
-  return ring;
 }
 
 /** Herhangi bir geometrinin temsilci noktası (marker için): nokta ise kendisi, değilse sınır kutusunun merkezi. */
 export function representativePoint(geometry: Geometry): GeoJSON.Point {
   if (geometry.kind === GEOMETRY_KIND.POINT) return { type: 'Point', coordinates: position(geometry.coord) };
-  if (geometry.kind === GEOMETRY_KIND.CIRCLE) return { type: 'Point', coordinates: position(geometry.center) };
+  if (geometry.kind === GEOMETRY_KIND.CIRCLE || geometry.kind === GEOMETRY_KIND.ELLIPSE) {
+    return { type: 'Point', coordinates: position(geometry.center) };
+  }
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;

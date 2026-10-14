@@ -222,7 +222,7 @@ describe('deck.gl yolu: sıra (MapLibre yığınında)', () => {
     { id: 'units', layerId: 'birlikler', order: 2 },
     { id: 'above', layerId: 'above', order: 3 },
   ];
-  const operational = () => map.layerOrder().filter((id) => id !== 'c2-basemap-top');
+  const operational = () => map.layerOrder().filter((id) => id !== 'c2-basemap-top' && !id.startsWith('c2-draw-'));
 
   it('deck katmanı alt grubun üstüne, üst grubun altına girer', () => {
     adapter.applyBatch({
@@ -250,7 +250,7 @@ describe('deck.gl yolu: sıra (MapLibre yığınında)', () => {
     adapter.applyBatch({ groups: { remove: [], upsert: groups }, features: { remove: [], upsert: [rf(unit('a', 32))] } });
     adapter.applyBatch({ features: { remove: [], upsert: [rf(polygon('p1'), { groupId: 'below' })] } });
     const order = operational();
-    expect(order.at(-1)).toBe('deck-maplibre-layer-group-last');
+    expect(order.at(-1)).toBe('deck-maplibre-layer-group-before:c2-draw-fill');
     expect(order.indexOf('c2-below-vector-fill')).toBe(0);
   });
 
