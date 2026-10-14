@@ -43,6 +43,7 @@ Durum: ✅ (çekirdek `draw/` + `geo/shapes.ts`, MapLibre `draw-preview.ts`, Rea
 - [x] MapLibre önizlemesi: kalıcı en üst katmanlar (çapa) — deck.gl dahil tüm operasyonel katmanlar altında kalır
 - [x] React: `useMapDraw()` (promise), `<DrawToolbar>` (kütüphane UI'ı: araçlar, ipucu, canlı ölçüm, Bitir / Geri al / İptal); çizim sürerken varsayılan seçim / hover kapalı
 - [x] Tarayıcı hatası düzeltildi: araç çubuğunun dış kutusu panelin altındaki boşlukta haritaya giden tıklamaları yutuyordu (`pointer-events`)
+- [x] Çizimleri silme: sağ tık menüsünde (`<MapContextMenu>`) çizimse "Sil" → `tx.removeFeatures`. Silme kuralı uygulamanın (spike: yalnız "Çizimler" katmanı; canlı birlikler silinemez; gerçek uygulamada backend isteği olabilir)
 - [ ] (Sonraya) Snapping (köşeye / unsura yapışma), sürükleyerek çizim, askeri kontrol tedbiri araçları (ok, faz hattı) — gerekince yeni araç olarak çekirdeğe
 - [ ] (Sonraya) Araç çubuğu Faz 2.5'te düzenleme moduyla genişleyecek
 

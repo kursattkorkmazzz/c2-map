@@ -45,6 +45,10 @@
   cursor: pointer;
 }
 
+.context-menu button.danger {
+  color: #ff8080;
+}
+
 .context-menu button:hover {
   background: #2f3a47;
 }

@@ -19,12 +19,14 @@ import {
   MAP_EVENT,
   SELECT_MODE,
   STREAM_FORMAT,
+  type DrawToolKind,
   type Feature,
   type StreamItem,
 } from '@c2/map-core';
 import { createMaplibreAdapter, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
 import {
   Circle,
+  DRAW_TOOL_LABELS,
   DrawToolbar,
   Map,
   MapBasemap,
@@ -54,6 +56,7 @@ const params = new URLSearchParams(location.search);
 const COUNT = Number(params.get('n') ?? 3000);
 const MOTION = (params.get('motion') ?? MOTION_MODE.AUTO) as MotionMode;
 const UNITS = 'birlikler';
+const DRAWINGS = 'cizimler';
 
 // ── Uygulama düzeyi nesneler (React dışında, bir kez) ────────────
 
@@ -127,7 +130,7 @@ function saveDrawing(geometry: Feature['geometry'], tool: string): void {
     tx.upsertFeatures([
       {
         id,
-        layerId: 'cizimler',
+        layerId: DRAWINGS,
         kind: 'vector',
         geometry,
         style: { fillColor: '#4dd0e1', fillOpacity: 0.2, strokeColor: '#4dd0e1', strokeWidth: 2, pointColor: '#4dd0e1' },
@@ -172,15 +175,22 @@ function UnitTooltip({ id }: { id: string }) {
 
 function ContextMenu({ featureId, coord, close }: ContextMenuState) {
   const map = useMap();
+  const store = useMapStore();
   const { select } = useSelection();
+  // Yalnız kullanıcı çizimleri silinebilir (canlı birlikler backend'e ait). Silme kuralı uygulamanın.
+  const drawingTool = useFeature(featureId ?? '', (f) => (f?.layerId === DRAWINGS ? String(f.meta?.tool ?? '') : null));
   const run = (action: () => void) => () => {
     action();
     close();
   };
   return (
     <>
-      <div className="context-title">{featureId ?? 'Harita'}</div>
-      {featureId ? (
+      <div className="context-title">{featureId ? (drawingTool ? `Çizim: ${DRAW_TOOL_LABELS[drawingTool as DrawToolKind] ?? drawingTool}` : featureId) : 'Harita'}</div>
+      {featureId && drawingTool !== null ? (
+        <button className="danger" onClick={run(() => store.transaction((tx) => tx.removeFeatures([featureId])))}>
+          Sil
+        </button>
+      ) : featureId ? (
         <>
           <button onClick={run(() => select(featureId, SELECT_MODE.ADD))}>Seçime ekle</button>
           <button onClick={run(() => coord && map.flyTo({ center: coord, zoom: 10 }))}>Merkeze al</button>
@@ -337,7 +347,7 @@ function App() {
       </MapLayer>
 
       {/* Kullanıcı çizimleri: araç çubuğundan gelen geometri store'a (uygulamanın kararı) */}
-      <MapLayer id="cizimler" name="Çizimler" />
+      <MapLayer id={DRAWINGS} name="Çizimler" />
       <DrawToolbar onComplete={saveDrawing} />
 
       {/* Canlı birlikler: içi boş katman; unsurlar akıştan store'a */}
