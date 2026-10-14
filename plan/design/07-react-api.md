@@ -27,7 +27,7 @@ Statik / az sayıda unsur için (kontrol tedbirleri, çizimler):
 - `<MapLayer id name visible opacity renderGroup>` — iç içe olabilir (grup = katman).
 - `<MapFeature id kind geometry style props />`, kısayollar `<Polygon>`, `<Polyline>`,
   `<Circle>`, `<Marker>`, `<MilSymbol>`, `<CompositeFeature>`.
-- `<MapOverlay anchor offset>` — koordinata sabit React DOM; konum her karede `adapter.project`
+- `<MapOverlay anchor align offset>` — koordinata sabit React DOM (`align`: `top-left` / `center` / `bottom` / `top`; hizalama kutunun kendisine, içeriğe transform verilmez); konum her karede `adapter.project`
   ile DOM'a doğrudan yazılır (React render'ı yok). `viewchange` yalnız hareket bitince geldiği
   için yetmez.
 
@@ -65,6 +65,7 @@ useEffect(() => connectUnitStream(socket, store, { layerId: "birlikler" }), [soc
   render. Seçici sonucu kaynak referansına göre önbelleklenir (satır içi seçici serbest);
   `isEqual` yeni nesne döndüren seçicide gereksiz render'ı keser.
 - `useSelection()` → `{ selected, select, toggle, clear }`, `useHovered()`, `useBasemaps()`
+- `<MapTooltip>`, `<MapContextMenu>` (başsız) — [09](09-interaction-and-editing.md#etkileşim)
 - `useMapEvent / useLayerEvent / useFeatureEvent` (latest-ref deseni: callback değişince yeniden abone olunmaz)
 - `useMapDraw()` → `start(kind): Promise<Geometry>`, `cancel()`
 

@@ -5,14 +5,18 @@
 **Amaç:** Operasyonel etkileşim: seçim, hover, bağlam menüsü, overlay, çizim ve güvenli düzenleme.
 
 ## Açık kararlar (başlamadan)
-- [ ] #8 Çizim kütüphanesi (aday terra-draw)
-- [ ] #20 Taslak (draft) nerede yaşar
+- [ ] #8 Çizim: kütüphane mi, çekirdekte kendi araçlarımız mı → mimari önerisi [09](../design/09-interaction-and-editing.md#çizim-mimarisi-öneri) (onay bekliyor)
+- [x] #20 Taslak (draft) nerede yaşar → **store'da `drafts` haritası** (2026-10-14)
 
 ## 2.1 Seçim ve hover
 Tasarım: [09](../design/09-interaction-and-editing.md#etkileşim)
-- [ ] Tek/çoklu seçim (store ↔ feature-state ↔ LayerTree)
-- [ ] Hover + tooltip (`<MapOverlay>`)
-- [ ] Bağlam menüsü (`contextmenu`)
+Durum: ✅ (çekirdek `PointerModifiers`, adapter sağ tık, React `<MapTooltip>` / `<MapContextMenu>`; gerçek tarayıcıda `react.html`)
+- [x] Tek/çoklu seçim: tıkla = tek, Ctrl/⌘ = toggle, Shift = ekle; store ↔ feature-state (MapLibre) / halka (deck.gl). LayerTree tarafı → [Faz 1.6](phase-1.6-layer-tree.md)
+- [x] Olaylarda değiştirici tuşlar (`modifiers`), motordan bağımsız
+- [x] Hover + tooltip (`<MapTooltip>`: hover edilen unsur, imleci DOM üzerinden takip eder, katman süzgeci)
+- [x] Bağlam menüsü (`<MapContextMenu>`, başsız; adapter tarayıcı menüsünü bastırır — `suppressContextMenu`)
+- [x] Hata düzeltmesi: `<MapOverlay>` içeriği CSS ile kaydırılınca kutunun eski yeri tıklamaları yutuyordu → hizalama `align` prop'u ile kutunun kendisine
+- [ ] (Sonraya) Kutu ile seçim (alan içindeki birlikler) — adapter'a dikdörtgen sorgusu gerekir
 
 ## 2.2 `<MapOverlay>`
 Durum: ✅ — [Faz 1.4](phase-1-2d-mvp.md#14-c2map-react)'te öne alındı (seçili birlik kartı için)

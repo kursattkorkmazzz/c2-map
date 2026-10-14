@@ -210,6 +210,22 @@ describe('<MapOverlay>', () => {
     }
   });
 
+  it('align: kaydırma içeriğe değil kutunun kendisine (tıklanabilir alan = görünen alan)', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    try {
+      await renderMap(
+        <MapOverlay anchor={[10, 20]} align="bottom" offset={[0, -8]}>
+          <span>balon</span>
+        </MapOverlay>,
+      );
+      const box = document.querySelector('span')!.parentElement!;
+      expect(box.style.transform).toBe('translate(10px, 12px) translate(-50%, -100%)');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('<Map> dışında hata', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<MapOverlay anchor={[0, 0]} />)).toThrow(/<Map> içinde/);

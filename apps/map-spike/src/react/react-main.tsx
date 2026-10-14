@@ -12,6 +12,7 @@ import {
   createMapStore,
   GEOMETRY_KIND,
   MAP_EVENT,
+  SELECT_MODE,
   STREAM_FORMAT,
   type Feature,
   type StreamItem,
@@ -21,8 +22,11 @@ import {
   Circle,
   Map,
   MapBasemap,
+  MapContextMenu,
   MapLayer,
   MapOverlay,
+  MapTooltip,
+  type ContextMenuState,
   Polygon,
   Polyline,
   useBasemaps,
@@ -132,13 +136,44 @@ function UnitCard({ id }: { id: string }) {
   );
 }
 
+function UnitTooltip({ id }: { id: string }) {
+  const birim = useFeature(id, (f) => String(f?.meta?.birim ?? ''));
+  return (
+    <>
+      <b>{id}</b> {birim}
+    </>
+  );
+}
+
+function ContextMenu({ featureId, coord, close }: ContextMenuState) {
+  const map = useMap();
+  const { select } = useSelection();
+  const run = (action: () => void) => () => {
+    action();
+    close();
+  };
+  return (
+    <>
+      <div className="context-title">{featureId ?? 'Harita'}</div>
+      {featureId ? (
+        <>
+          <button onClick={run(() => select(featureId, SELECT_MODE.ADD))}>Seçime ekle</button>
+          <button onClick={run(() => coord && map.flyTo({ center: coord, zoom: 10 }))}>Merkeze al</button>
+        </>
+      ) : (
+        <button onClick={run(() => coord && map.flyTo({ center: coord }))}>Buraya git</button>
+      )}
+    </>
+  );
+}
+
 function SelectedOverlay() {
   const { selected } = useSelection();
-  const id = [...selected][0];
+  const id = selected.size === 1 ? [...selected][0] : undefined; // çoklu seçimde kart yok
   const coord = useFeature(id ?? '', (f) => (f?.geometry.kind === GEOMETRY_KIND.POINT ? f.geometry.coord : undefined));
   if (!id) return null;
   return (
-    <MapOverlay anchor={coord} offset={[0, -24]}>
+    <MapOverlay anchor={coord} align="bottom" offset={[0, -24]}>
       <UnitCard id={id} />
     </MapOverlay>
   );
@@ -173,6 +208,10 @@ function BasemapPicker() {
       </select>
     </label>
   );
+}
+
+function SelectionCount() {
+  return <>{useSelection().selected.size}</>;
 }
 
 function Panel() {
@@ -214,6 +253,7 @@ function Panel() {
           <tr><td>FPS (sayfa)</td><td>{fps}</td></tr>
           <tr><td>Panel render</td><td>{renders}</td></tr>
           <tr><td>Son tıklama</td><td>{lastClick}</td></tr>
+          <tr><td>Seçili</td><td><SelectionCount /></td></tr>
         </tbody>
       </table>
     </aside>
@@ -244,6 +284,10 @@ function App() {
       <MapLayer id={UNITS} name="Birlikler" renderGroup />
 
       <SelectedOverlay />
+      <MapTooltip layerId={UNITS} className="unit-tooltip">
+        {(id) => <UnitTooltip id={id} />}
+      </MapTooltip>
+      <MapContextMenu className="context-menu">{(menu) => <ContextMenu {...menu} />}</MapContextMenu>
       <Panel />
     </Map>
   );

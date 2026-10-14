@@ -87,6 +87,8 @@ export type MaplibreAdapterOptions = {
   loadDeck?: () => Promise<DeckModules>;
   /** Saat / kare zamanlayıcı (test için). */
   deckTiming?: DeckTiming;
+  /** Sağ tıkta tarayıcının kendi menüsünü bastır (varsayılan `true`; uygulama `CONTEXT_MENU` ile kendi menüsünü açar). */
+  suppressContextMenu?: boolean;
 };
 
 export type MaplibreAdapterStats = BasemapStats & {
@@ -571,17 +573,28 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
       this.detachers.push(() => map.off(type, listener));
     };
     const emit = (input: Parameters<MapEventSink['emit']>[0]) => this.events?.emit(input);
-    const pointerOf = (e: any) => ({
-      coord: [e.lngLat.lng, e.lngLat.lat] as LngLat,
-      screen: { x: e.point.x, y: e.point.y },
-      originalEvent: e.originalEvent,
-    });
+    const pointerOf = (e: any) => {
+      const original = e.originalEvent as Partial<MouseEvent> | undefined;
+      return {
+        coord: [e.lngLat.lng, e.lngLat.lat] as LngLat,
+        screen: { x: e.point.x, y: e.point.y },
+        modifiers: {
+          shift: original?.shiftKey ?? false,
+          ctrl: original?.ctrlKey ?? false,
+          alt: original?.altKey ?? false,
+          meta: original?.metaKey ?? false,
+        },
+        originalEvent: e.originalEvent,
+      };
+    };
 
     on('click', (e) => emit({ type: MAP_EVENT.CLICK, featureId: this.hitTest(e.point), ...pointerOf(e) }));
     on('dblclick', (e) => emit({ type: MAP_EVENT.DBLCLICK, featureId: this.hitTest(e.point), ...pointerOf(e) }));
-    on('contextmenu', (e) =>
-      emit({ type: MAP_EVENT.CONTEXT_MENU, featureId: this.hitTest(e.point), ...pointerOf(e) }),
-    );
+    on('contextmenu', (e) => {
+      // Uygulama kendi menüsünü açar; tarayıcınınki üstüne çıkmasın.
+      if (this.options.suppressContextMenu !== false) (e.originalEvent as Event | undefined)?.preventDefault?.();
+      emit({ type: MAP_EVENT.CONTEXT_MENU, featureId: this.hitTest(e.point), ...pointerOf(e) });
+    });
     on('moveend', () => emit({ type: MAP_EVENT.VIEW_CHANGE, view: this.getView() }));
 
     // Hover: fare olayları kare başına bire indirilir; enter/leave yalnız unsur değişince.

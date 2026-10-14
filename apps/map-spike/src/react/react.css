@@ -1,5 +1,4 @@
 .unit-card {
-  transform: translate(-50%, -100%);
   min-width: 180px;
   padding: 6px 8px;
   background: rgba(20, 24, 30, 0.92);
@@ -9,6 +8,45 @@
   font-size: 12px;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.unit-tooltip {
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.context-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  background: #20262e;
+  border: 1px solid #3a4452;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.context-menu .context-title {
+  padding: 4px 8px;
+  color: #9ad0ff;
+  font-size: 12px;
+}
+
+.context-menu button {
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  color: #e6e6e6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: #2f3a47;
 }
 
 #panel button {

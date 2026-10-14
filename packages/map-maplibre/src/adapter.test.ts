@@ -277,6 +277,24 @@ describe('etkileşim → olaylar', () => {
     expect(map.lastQueryLayers).not.toContain('c2-g1-marker-halo');
   });
 
+  it('değiştirici tuşlar olaya taşınır (çoklu seçim için)', () => {
+    map.fire('click', { ...mouse, originalEvent: { shiftKey: true, ctrlKey: false, altKey: false, metaKey: true } });
+    expect(events.received.at(-1)?.modifiers).toEqual({ shift: true, ctrl: false, alt: false, meta: true });
+  });
+
+  it('sağ tık: CONTEXT_MENU + tarayıcı menüsü bastırılır (seçenekle kapatılabilir)', async () => {
+    const preventDefault = vi.fn();
+    map.hits = [{ layer: 'c2-g1-marker-icon', fid: 'm1' }];
+    map.fire('contextmenu', { ...mouse, originalEvent: { preventDefault } });
+    expect(events.received.at(-1)).toMatchObject({ type: MAP_EVENT.CONTEXT_MENU, featureId: 'm1', screen: { x: 10, y: 20 } });
+    expect(preventDefault).toHaveBeenCalled();
+
+    await mount({ suppressContextMenu: false });
+    const allow = vi.fn();
+    map.fire('contextmenu', { ...mouse, originalEvent: { preventDefault: allow } });
+    expect(allow).not.toHaveBeenCalled();
+  });
+
   it('boşluğa tıklama: featureId yok', () => {
     map.fire('click', mouse);
     expect(events.received.at(-1)).toMatchObject({ type: MAP_EVENT.CLICK, featureId: undefined });

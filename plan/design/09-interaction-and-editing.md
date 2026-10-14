@@ -4,9 +4,36 @@
 
 ## Etkileşim
 
-- **Seçim:** tek/çoklu; `store.selection` ↔ feature-state ↔ LayerTree.
-- **Hover/tooltip:** `pointerenter/leave` + `<MapOverlay>`.
-- **Context menu:** `contextmenu` → UI `DropdownMenu`.
+- **Seçim:** tek/çoklu; `store.selection` ↔ feature-state ↔ LayerTree. Varsayılan kural
+  (`applyClickSelection`): tıkla = yalnız bu, Ctrl/⌘ = toggle, Shift = ekle, boşa tıkla = temizle
+  (değiştiriciyle boşa tıklama seçimi korur). Değiştirici tuşlar olayda motordan bağımsız
+  `modifiers` alanıyla gelir; adapter orijinal olaydan doldurur.
+- **Hover/tooltip:** `<MapTooltip>{id => …}</MapTooltip>` — store'daki hover'a bakar; React yalnız
+  hover edilen unsur değişince render olur, imleç takibi `POINTER_MOVE` ile DOM'a doğrudan.
+- **Context menu:** `<MapContextMenu>{menu => …}</MapContextMenu>` — başsız (görünüm uygulamanın
+  `DropdownMenu`'sü); `{ featureId?, coord, screen, close }`. Kapanma: Esc, dışarı basma, harita
+  tıklaması, harita hareketi. Adapter tarayıcının kendi menüsünü bastırır (`suppressContextMenu`).
+- **Overlay hizalaması:** `<MapOverlay align>` — kaydırma kutunun kendisine uygulanır. İçerik CSS
+  `transform` ile kaydırılırsa kutunun eski yeri haritanın üstünde görünmez engel olur ve
+  tıklamaları yutar (tarayıcı testinde bulundu).
+
+## Çizim mimarisi (öneri)
+
+> Karar #8 — onay bekliyor (2026-10-14).
+
+Sözleşme çekirdekte, uygulama adapter'da: `MapAdapter.startDraw(kind) → DrawSession`,
+`editFeature(id)`, `capabilities.draw`. Asıl soru, işin ne kadarının çekirdekte olacağı:
+
+- **A) Kalın adapter:** çekirdek yalnız sözleşme + ortak geometri hesapları + taslak; çizimi
+  adapter yapar (içeride terra-draw veya kendi kodu). Cesium'da yeniden yazılır.
+- **B) İnce adapter (önerilen):** çizim araçları (nokta / çizgi / poligon / daire / dikdörtgen,
+  askeri tedbirler) çekirdekte TS durum makineleri. Çizilen şekil store'da taslak unsur olarak
+  durur, mevcut renderer'larla çizilir. Adapter'dan yalnız işaretçi olayları (koordinatlı; sürükleme
+  eklenecek) ve "çizerken haritayı kaydırma" kilidi istenir. Her motor çizimi bedavaya alır.
+  Bedeli: tutamaç / snapping bizim; çizim önizlemesi MapSync'in 10 Hz sınırına takılmamalı
+  (taslağa öncelik).
+- B'de de bir motor kütüphanesi (ör. terra-draw) aynı `DrawSession` sözleşmesini uygulayan
+  alternatif olarak adapter içine takılabilir.
 
 ## Çizim kütüphanesi
 
@@ -36,5 +63,6 @@ oturumu**dur.
 4. Onay gelince taslak kalkar; asıl kayıt backend'den gelen yeni `rev` ile güncellenir.
    İptalde taslak atılır.
 
-Modelde bunun için yalnız `Feature.rev` gerekir. Taslak mekanizması Faz 2'de tasarlanır;
-store'a mı (ör. `drafts` haritası) yoksa ayrı bir `EditSession`'a mı ait olacağı o zaman kararlaştırılır.
+Modelde bunun için yalnız `Feature.rev` gerekir. **Karar #20 (2026-10-14): taslak store'da
+`drafts` haritasında yaşar** — motor bağımsız; MapSync taslağı olan unsur için taslağı çizer;
+React hook'ları taslağı okuyabilir; "başkası değiştirdi" uyarısı `rev` karşılaştırmasıyla.

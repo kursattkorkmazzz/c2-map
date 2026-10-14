@@ -32,6 +32,15 @@ export const isSyntheticId = (id: string): boolean => id.startsWith(CLUSTER_ID_P
 
 export type ScreenPoint = { x: number; y: number };
 
+/** Olay anındaki değiştirici tuşlar (motorun orijinal olayına bakmadan çoklu seçim vb. için). */
+export type PointerModifiers = {
+  readonly shift: boolean;
+  readonly ctrl: boolean;
+  readonly alt: boolean;
+  /** macOS ⌘ / Windows tuşu. */
+  readonly meta: boolean;
+};
+
 /** Adapter'ın ürettiği normalize olay. */
 export type MapEventInput = {
   type: MapEventType;
@@ -39,6 +48,8 @@ export type MapEventInput = {
   featureId?: string;
   coord?: LngLat;
   screen?: ScreenPoint;
+  /** İşaretçi olaylarında değiştirici tuşlar. */
+  modifiers?: PointerModifiers;
   /** VIEW_CHANGE için güncel kamera. */
   view?: CameraView;
   /** Olay türüne özel ek veri (ör. kümenin içerdiği unsur id'leri, çizim geometrisi). */

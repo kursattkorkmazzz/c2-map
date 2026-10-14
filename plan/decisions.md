@@ -8,6 +8,9 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-14 | **#20 Taslak (draft) store'da `drafts` haritasında** | Motor bağımsız; backend güncellemesi asıl kaydı değiştirir, taslak kaymaz; React taslağı okuyabilir | [09](design/09-interaction-and-editing.md#düzenleme-ve-eşzamanlılık) |
+| 2026-10-14 | LayerTree (Faz 1.6) sonraya; Faz 2'ye geçildi | Kullanıcı önceliği | [phase-2](phases/phase-2-interaction.md) |
+| 2026-10-14 | Varsayılan seçim kuralı: tıkla = tek, Ctrl/⌘ = toggle, Shift = ekle; olaylarda motordan bağımsız `modifiers` | Masaüstü alışkanlığı; uygulama motor olayına bakmasın | [09](design/09-interaction-and-editing.md#etkileşim) |
 | 2026-10-13 | React bildirimsel bileşenleri prop değişiminde **yalnız değişen alanı** yazar (katman, altlık); yazmalar mikro görevde tek transaction | Bileşen prop'u, kullanıcının LayerTree'de verdiği kararı (görünürlük) başka bir prop değişti diye ezmemeli; çok sayıda bildirimsel unsur tek MapSync bildirimiyle | [07](design/07-react-api.md#deklaratif-bileşenler) |
 | 2026-10-13 | `<Map>` varsayılan etkileşimleri açık: tıklama → seçim, üzerine gelme → hover (`defaultInteractions={false}` ile kapatılır) | Her uygulama aynı bağlamayı yazmasın; hedefli dinleyici `stopPropagation` ile engelleyebilir | [07](design/07-react-api.md#kabuk) |
 | 2026-10-13 | `<MapOverlay>` Faz 2'den Faz 1.4'e alındı; konum rAF + `project` ile DOM'a doğrudan | Demo'daki seçili birlik kartı için gerekli; `viewchange` hareket bitince geldiğinden kart geride kalırdı | [07](design/07-react-api.md#deklaratif-bileşenler) |
@@ -35,7 +38,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | # | Konu | Durum | Ne zaman gerekli |
 |---|---|---|---|
-| 8 | Çizim kütüphanesi | ⏳ Aday terra-draw ([09](design/09-interaction-and-editing.md#çizim-kütüphanesi)) | Faz 2 |
+| 8 | Çizim: kütüphane mi, çekirdekte kendi araçlarımız mı | ⏳ Öneri: sözleşme + araçlar çekirdekte, adapter yalnız girdi + kilit ([09](design/09-interaction-and-editing.md#çizim-mimarisi-öneri)) | Faz 2.4 |
 | 10 | Backend mesaj formatı | ✅ İkisi de; en kötü durum (tam nesne) esas. ⏳ Hâlâ açık: `rev`/`ts` var mı, snapshot endpoint'i nasıl? | Faz 1 (ingest) |
 | 11 | Güncelleme frekansı | ✅ ≤ 1 Hz / tavan 10 Hz | — |
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma (glyph/sprite çakışması) | Faz 4 |
@@ -44,4 +47,4 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 | 17 | LOD eşikleri | ⏳ Hangi zoom'da nokta → sembol (Faz 3.5'teki ölçümle) | Faz 3 |
 | 18 | Etiketler | ⏸ Hangi zoom'dan itibaren; MapLibre mi deck.gl `TextLayer` mı | Faz 3 |
 | 19 | Hedef donanım | ⏸ Değişken; tasarım düşük donanımda da çalışacak şekilde (LOD, `auto` hareket) | Faz 1 ölçümleri |
-| 20 | Taslak (draft) nerede yaşar | ⏳ Store'da `drafts` haritası mı, ayrı `EditSession` mı | Faz 2 |
+| 20 | Taslak (draft) nerede yaşar | ✅ Store'da `drafts` haritası | Faz 2.5 |

@@ -1,7 +1,9 @@
 // @c2/map-react — @c2/map-core için React binding'i. Motor bilmez: adapter dışarıdan verilir.
 // Tasarım: plan/design/07-react-api.md
 
-export { Map, MapStoreProvider, type MapProps } from './map';
+export { applyClickSelection, Map, MapStoreProvider, type MapProps } from './map';
+export { isInLayer, MapTooltip, type MapTooltipProps } from './components/map-tooltip';
+export { MapContextMenu, type ContextMenuState, type MapContextMenuProps } from './components/map-context-menu';
 export type { MapHandle } from './map-handle';
 export { MapLayer, type MapLayerProps } from './components/map-layer';
 export {
@@ -15,7 +17,7 @@ export {
   type MapFeatureProps,
 } from './components/map-feature';
 export { MapBasemap, type MapBasemapProps } from './components/map-basemap';
-export { MapOverlay, type MapOverlayProps } from './components/map-overlay';
+export { MapOverlay, OVERLAY_ALIGN, type MapOverlayProps, type OverlayAlign } from './components/map-overlay';
 export {
   useBasemaps,
   useFeature,

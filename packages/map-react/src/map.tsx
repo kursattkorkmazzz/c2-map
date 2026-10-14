@@ -12,10 +12,13 @@ import {
   FeatureKindRegistry,
   MAP_EVENT,
   MapSync,
+  SELECT_MODE,
   SymbologyRegistry,
   type CameraView,
   type MapAdapter,
   type MapStore,
+  type MapTx,
+  type PointerModifiers,
   type Scheduler,
 } from '@c2/map-core';
 import {
@@ -46,8 +49,8 @@ export type MapProps = {
   /** MapSync zamanlayıcısı (varsayılan: rAF + en fazla 10 Hz). */
   scheduler?: Scheduler;
   /**
-   * Varsayılan etkileşimler (varsayılan `true`): tıklama → seçim (boşa tıklama seçimi temizler),
-   * üzerine gelme → hover. Global dinleyicidir: unsur/katman dinleyicisinde `stopPropagation()`
+   * Varsayılan etkileşimler (varsayılan `true`): tıklama → seçim (Ctrl/⌘ toggle, Shift ekle;
+   * boşa tıklama temizler — `applyClickSelection`), üzerine gelme → hover (`<MapTooltip>` bunu kullanır). Global dinleyicidir: unsur/katman dinleyicisinde `stopPropagation()`
    * çağırmak varsayılanı engeller.
    */
   defaultInteractions?: boolean;
@@ -152,9 +155,7 @@ export function Map(props: MapProps) {
   useEffect(() => {
     if (!defaultInteractions) return;
     const offs = [
-      router.on(MAP_EVENT.CLICK, (e) =>
-        store.transaction((tx) => (e.featureId ? tx.select([e.featureId]) : tx.clearSelection())),
-      ),
+      router.on(MAP_EVENT.CLICK, (e) => store.transaction((tx) => applyClickSelection(tx, e.featureId, e.modifiers))),
       router.on(MAP_EVENT.POINTER_ENTER, (e) => store.transaction((tx) => tx.setHovered(e.featureId ?? null))),
       router.on(MAP_EVENT.POINTER_LEAVE, () => store.transaction((tx) => tx.setHovered(null))),
     ];
@@ -176,6 +177,23 @@ export function Map(props: MapProps) {
       </MapContext.Provider>
     </StoreContext.Provider>
   );
+}
+
+/**
+ * Tıklama → seçim kuralı (masaüstü alışkanlığı):
+ *   tıkla            → yalnız bu (boşa tıklama: temizle)
+ *   Ctrl/⌘ + tıkla   → ekle/çıkar (toggle)
+ *   Shift + tıkla    → ekle
+ *   değiştiriciyle boşa tıklama → seçim korunur (yanlışlıkla kaybolmasın)
+ */
+export function applyClickSelection(tx: MapTx, featureId: string | undefined, modifiers?: PointerModifiers): void {
+  const toggle = modifiers?.ctrl || modifiers?.meta;
+  const add = modifiers?.shift;
+  if (!featureId) {
+    if (!toggle && !add) tx.clearSelection();
+    return;
+  }
+  tx.select([featureId], toggle ? SELECT_MODE.TOGGLE : add ? SELECT_MODE.ADD : SELECT_MODE.REPLACE);
 }
 
 /** <Map> dışındaki bileşenler (yan panel, LayerTree) store hook'larını kullanabilsin diye. */
