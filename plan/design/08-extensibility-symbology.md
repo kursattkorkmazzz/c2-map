@@ -91,6 +91,11 @@ Seçim / hover / sağ tık / izinler unsurun kendisine aittir (parçalara değil
 - **Model ekseni:** glTF +Z burun, +Y yukarı kabul edilir; dönüş `[0, 180 + yawOffset − heading, 90]`
   (tarayıcıda doğrulandı). Farklı eksenli model `yawOffsetDeg` ile düzeltilir. Ölçek
   `modelScale` (birim → metre) + uzaktan görünürlük için `minPixels`.
+- **Akıcı hareket:** renderer `interpolate(from, to, t)` verirse (İHA: `interpolateUav`) ve hareket modu
+  açıksa, yeni mesaj gelince unsur ekrandaki hâlinden yenisine kayar. Süre mesajlar arası süreden
+  ölçülür (5 Hz → 200 ms; 50 ms – 2 sn); açılar en kısa yoldan (350° → 10° 0°'dan geçer).
+- **React:** `<CompositeFeature id kind position props />` — bildirimsel composite (az sayıda, ör.
+  planlanan / sabit gözlem İHA'sı). Canlı olanlar akıştan (`createLayerStream`).
 - **Yarı saydam yüzeyler** derinliğe yazmaz (`depthWriteEnabled: false`): koni yüzleri birbirini
   ve modeli kesip delik bırakmasın.
 - **3B görünüm** MapLibre eğimiyle (2,5B): arazi yok, irtifa düz zemine göre. Gerçek arazi / küre

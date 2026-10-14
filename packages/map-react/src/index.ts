@@ -9,6 +9,7 @@ export { MapLayer, type MapLayerProps } from './components/map-layer';
 export {
   BUILTIN_KIND,
   Circle,
+  CompositeFeature,
   MapFeature,
   Marker,
   MilSymbol,

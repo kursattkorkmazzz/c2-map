@@ -26,7 +26,7 @@ Statik / az sayıda unsur için (kontrol tedbirleri, çizimler):
 - `<MapBasemap id name source visible opacity order />`
 - `<MapLayer id name visible opacity renderGroup>` — iç içe olabilir (grup = katman).
 - `<MapFeature id kind geometry style props />`, kısayollar `<Polygon>`, `<Polyline>`,
-  `<Circle>`, `<Marker>`, `<MilSymbol>`, `<CompositeFeature>`.
+  `<Circle>`, `<Marker>`, `<MilSymbol>`, `<CompositeFeature>` ([08](08-extensibility-symbology.md#composite-unsur-iha)).
 - `<MapOverlay anchor align offset>` — koordinata sabit React DOM (`align`: `top-left` / `center` / `bottom` / `top`; hizalama kutunun kendisine, içeriğe transform verilmez); konum her karede `adapter.project`
   ile DOM'a doğrudan yazılır (React render'ı yok). `viewchange` yalnız hareket bitince geldiği
   için yetmez.

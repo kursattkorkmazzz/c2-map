@@ -85,6 +85,7 @@ export function uavRenderer(options: UavRendererOptions): DeckLayersRenderer {
 
   return {
     type: 'layers',
+    interpolate: interpolateUav,
 
     async load() {
       const [mesh, layers, gltf] = await Promise.all([
@@ -215,6 +216,42 @@ export function uavRenderer(options: UavRendererOptions): DeckLayersRenderer {
       return layers;
     },
   };
+}
+
+/**
+ * İki İHA mesajı arası ara hâl: konum, irtifa, burun yönü (en kısa açıdan: 350° → 10° 0°'dan geçer),
+ * kamera pan / eğim / görüş açısı. Diğer alanlar hedef mesajdan.
+ */
+export function interpolateUav(from: Feature, to: Feature, t: number): Feature {
+  const a = uavPropsOf(from);
+  const b = uavPropsOf(to);
+  const pa = pointOf(from);
+  const pb = pointOf(to);
+  if (!a || !b || !pa || !pb) return to;
+  const lerp = (x: number, y: number) => x + (y - x) * t;
+  const sensor =
+    a.sensor && b.sensor
+      ? {
+          ...b.sensor,
+          panDeg: lerpAngle(a.sensor.panDeg, b.sensor.panDeg, t),
+          tiltDeg: lerp(a.sensor.tiltDeg, b.sensor.tiltDeg),
+          hfovDeg: lerp(a.sensor.hfovDeg, b.sensor.hfovDeg),
+          vfovDeg: lerp(a.sensor.vfovDeg, b.sensor.vfovDeg),
+        }
+      : b.sensor;
+  const props: UavProps = {
+    ...b,
+    headingDeg: (lerpAngle(a.headingDeg, b.headingDeg, t) + 360) % 360,
+    altitudeM: lerp(a.altitudeM, b.altitudeM),
+    ...(sensor ? { sensor } : {}),
+  };
+  return { ...to, geometry: { kind: 'point', coord: [lerp(pa[0], pb[0]), lerp(pa[1], pb[1])] }, props };
+}
+
+/** Açılar arası en kısa yol (derece). */
+function lerpAngle(a: number, b: number, t: number): number {
+  const d = ((((b - a) % 360) + 540) % 360) - 180;
+  return a + d * t;
 }
 
 function uavPropsOf(feature: Feature): UavProps | null {

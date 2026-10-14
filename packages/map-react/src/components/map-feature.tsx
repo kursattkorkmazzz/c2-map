@@ -110,3 +110,17 @@ export function MilSymbol<S = AnyStyle>({
     />
   );
 }
+
+/**
+ * Composite unsur (ör. İHA: store'da TEK unsur, haritada model + koni + etiket gibi çok parça).
+ * Parçaları adapter'daki o kind'ın renderer'ı türetir (MapLibre: `deckRenderers: { uav: uavRenderer(…) }`);
+ * React yalnız unsuru yazar. Konum `position` (nokta) veya `geometry` ile; parçaları belirleyen veri
+ * `props`'ta. Canlı / çok sayıda olanlar bileşen değil akış (`createLayerStream`) ile beslenir.
+ */
+export function CompositeFeature<P = Record<string, unknown>, S = unknown>(
+  input: Omit<MapFeatureProps<S, P>, 'geometry'> &
+    ({ position: LngLat; geometry?: undefined } | { geometry: Geometry; position?: undefined }),
+) {
+  const { position, geometry, ...rest } = input;
+  return <MapFeature<S, P> {...rest} geometry={geometry ?? { kind: GEOMETRY_KIND.POINT, coord: position! }} />;
+}

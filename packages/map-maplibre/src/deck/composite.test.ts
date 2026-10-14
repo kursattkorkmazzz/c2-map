@@ -137,3 +137,105 @@ describe('uavRenderer (gerçek deck.gl sınıfları, WebGL yok)', { timeout: 30_
     expect(byId['p-model']!.props.data.map((x: { featureId: string }) => x.featureId)).toEqual(['a']);
   });
 });
+
+describe('composite akıcı hareket', () => {
+  function manualClock() {
+    let now = 1000;
+    let queue: ((t: number) => void)[] = [];
+    return {
+      timing: { now: () => now, requestFrame: (cb: (t: number) => void) => queue.push(cb) },
+      frame(ms: number) {
+        now += ms;
+        const run = queue;
+        queue = [];
+        for (const cb of run) cb(now);
+      },
+      advance(ms: number) {
+        now += ms;
+      },
+      get pending() {
+        return queue.length;
+      },
+    };
+  }
+
+  const lon = (f: Feature) => (f.geometry as unknown as { coord: number[] }).coord[0]!;
+  const glidingRenderer: DeckLayersRenderer = {
+    type: 'layers',
+    layers: (features, ctx) => [new FakeLayer('body', { id: `${ctx.idPrefix}-body`, data: features.map((f) => ({ featureId: f.feature.id, x: lon(f.feature) })) })],
+    interpolate: (from, to, t) => ({ ...to, geometry: { kind: 'point', coord: [lon(from) + (lon(to) - lon(from)) * t, 39] } }),
+  };
+
+  async function mountWith(motion: 'on' | 'off') {
+    const map = new FakeMap();
+    const deck = createFakeDeck();
+    const clock = manualClock();
+    const adapter = new MaplibreAdapter({
+      deckRenderers: { uav: glidingRenderer },
+      loadDeck: async () => deck.modules,
+      createMap: async () => map,
+      motion,
+      deckTiming: clock.timing,
+    });
+    await adapter.mount({} as HTMLElement, {
+      initialView: { center: [0, 0] },
+      events: { emit: () => {} },
+      kinds: new FeatureKindRegistry(),
+      symbology: new SymbologyRegistry(),
+      basemapProviders: new BasemapProviderRegistry(),
+    });
+    const x = () => deck.overlay().layers.find((l) => l.id.endsWith('-body'))!.props.data[0].x;
+    const send = (lon: number, changed = 1) => adapter.applyBatch({ features: { upsert: [rf(uav('a', lon), { changed })], remove: [] } });
+    return { clock, x, send };
+  }
+
+  it('ON: mesaj aralığı kadar sürede ekrandaki hâlden yenisine kayar; bitince döngü durur', async () => {
+    const { clock, x, send } = await mountWith('on');
+    send(30, RENDER_CHANGE_ALL); // ilk: kaymaz
+    clock.advance(200); // mesaj aralığı 200 ms
+    send(40);
+    expect(x()).toBe(30);
+    clock.frame(100);
+    expect(x()).toBeCloseTo(35, 6);
+    clock.frame(120);
+    expect(x()).toBe(40);
+    expect(clock.pending).toBe(0);
+  });
+
+  it('yolun ortasında yeni mesaj: ekrandaki konumdan devam (zıplama yok)', async () => {
+    const { clock, x, send } = await mountWith('on');
+    send(0, RENDER_CHANGE_ALL);
+    clock.advance(200);
+    send(10);
+    clock.frame(100); // x = 5
+    send(20); // yeni hedef; süre = 100 ms (son aralık)
+    expect(x()).toBeCloseTo(5, 6);
+    clock.frame(50);
+    expect(x()).toBeCloseTo(12.5, 6);
+  });
+
+  it('OFF: hemen yeni konum', async () => {
+    const { clock, x, send } = await mountWith('off');
+    send(30, RENDER_CHANGE_ALL);
+    clock.advance(200);
+    send(40);
+    expect(x()).toBe(40);
+    expect(clock.pending).toBe(0);
+  });
+});
+
+describe('interpolateUav', () => {
+  it('konum / irtifa doğrusal; yön ve pan en kısa açıdan', async () => {
+    const { interpolateUav } = await import('./uav-renderer');
+    const a = uav('a', 32, { headingDeg: 350, altitudeM: 1000, sensor: { panDeg: -170, tiltDeg: 40, hfovDeg: 20, vfovDeg: 10 } });
+    const b = uav('a', 33, { headingDeg: 10, altitudeM: 2000, sensor: { panDeg: 170, tiltDeg: 60, hfovDeg: 20, vfovDeg: 10 } });
+    const mid = interpolateUav(a, b, 0.5);
+    const p = mid.props as UavProps;
+    expect((mid.geometry as unknown as { coord: number[] }).coord).toEqual([32.5, 39]);
+    expect(p.altitudeM).toBe(1500);
+    expect(p.headingDeg).toBeCloseTo(0, 9);
+    expect(Math.abs(p.sensor!.panDeg)).toBeCloseTo(180, 9);
+    expect(p.sensor!.tiltDeg).toBe(50);
+    expect(interpolateUav(a, b, 1).props).toMatchObject({ headingDeg: 10, altitudeM: 2000 });
+  });
+});

@@ -11,8 +11,8 @@
 Tasarım: [04](../design/04-sync-and-rendering.md#composite)
 - [x] MapLibre: çok parçalı encode, `_fid` ile hit-test, seçim tüm parçalara (Faz 1.1'de geldi)
 - [x] deck.gl katman renderer'ı (`DeckLayersRenderer`) + ilk composite: **İHA** (`kind: 'uav'`: 3B model, sensör konisi, zemin izi, etiket) — öne alındı 2026-10-14, [08](../design/08-extensibility-symbology.md#composite-unsur-iha)
-- [ ] Composite parçalarında akıcı hareket (İHA şimdilik 5 Hz mesajla; deck transitions veya ara konum)
-- [ ] `<CompositeFeature>` React kısayolu
+- [x] Composite parçalarında akıcı hareket: renderer'ın `interpolate(from, to, t)` kancası (İHA: konum, irtifa, burun yönü ve pan en kısa açıdan, eğim, FOV); süre = mesajlar arası süre (50 ms – 2 sn); yolun ortasında yeni mesaj ekrandaki hâlden devam eder; `off / on / auto` hareket modu geçerli. Tarayıcı: `off`'ta ardışık karelerin %21'i değişti (5 Hz mesaj), `on`'da %71
+- [x] `<CompositeFeature id kind position|geometry props>` React kısayolu; spike'ta JSX'ten sürülen "GÖZCÜ" İHA'sı (kamera pan'ı kaydırıcıdan)
 
 ## 4.2 Kümeleme
 Tasarım: [04](../design/04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası)

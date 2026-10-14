@@ -28,6 +28,7 @@ import { createMaplibreAdapter, MOTION_MODE, uavRenderer, type DeckIcon, type Mo
 import { startUavStream, UAV_LAYER, UAV_VIEW } from './uav-sim';
 import {
   Circle,
+  CompositeFeature,
   DRAW_TOOL_LABELS,
   DrawToolbar,
   Map,
@@ -326,7 +327,7 @@ function SelectionCount() {
   return <>{useSelection().selected.size}</>;
 }
 
-function Panel() {
+function Panel({ gozcuPan, onGozcuPan }: { gozcuPan: number; onGozcuPan: (pan: number) => void }) {
   const map = useMap();
   const renders = useRenderCount();
   const [fps, setFps] = useState(0);
@@ -372,6 +373,10 @@ function Panel() {
       <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9, pitchDeg: 0, bearingDeg: 0 })}>Ankara'ya uç</button>{' '}
       <button onClick={() => map.flyTo(UAV_VIEW)}>İHA'lara git (3B)</button>
       <GoTo />
+      <label>
+        GÖZCÜ kamera (JSX) {gozcuPan}°
+        <input type="range" min={-180} max={180} value={gozcuPan} onChange={(e) => onGozcuPan(Number(e.target.value))} />
+      </label>
       <table>
         <tbody>
           <tr><td>FPS (sayfa)</td><td>{fps}</td></tr>
@@ -389,6 +394,7 @@ function Panel() {
 function App() {
   useEffect(startStream, []);
   useEffect(() => startUavStream(store, 5), []);
+  const [gozcuPan, setGozcuPan] = useState(0);
   return (
     <Map adapter={adapter} store={store} lifecycle={lifecycle} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
       {BASEMAPS.map((b) => (
@@ -415,6 +421,20 @@ function App() {
       <MapLayer id={UNITS} name="Birlikler" renderGroup editable={false} deletable={false} />
       {/* İHA'lar: composite kind 'uav', backend akışından (uav-sim.ts); birliklerin üstünde */}
       <MapLayer id={UAV_LAYER} name="İHA'lar" renderGroup editable={false} deletable={false} />
+      {/* Bildirimsel composite: aynı 'uav' kind'ı, React state'inden (kaydırıcı) */}
+      <MapLayer id="gozlem" name="Gözlem" renderGroup editable={false} deletable={false}>
+        <CompositeFeature<UavProps>
+          id="gozcu-1"
+          kind="uav"
+          position={[32.85, 39.93]}
+          props={{
+            callsign: 'GÖZCÜ (JSX)',
+            headingDeg: 45,
+            altitudeM: 3500,
+            sensor: { panDeg: gozcuPan, tiltDeg: 50, hfovDeg: 25, vfovDeg: 16, maxRangeM: 20_000 },
+          }}
+        />
+      </MapLayer>
       <MapTooltip layerId={UAV_LAYER} className="unit-tooltip">
         {(id) => <UavTooltip id={id} />}
       </MapTooltip>
@@ -424,7 +444,7 @@ function App() {
         {(id) => <UnitTooltip id={id} />}
       </MapTooltip>
       <MapContextMenu className="context-menu">{(menu) => <ContextMenu {...menu} />}</MapContextMenu>
-      <Panel />
+      <Panel gozcuPan={gozcuPan} onGozcuPan={setGozcuPan} />
     </Map>
   );
 }

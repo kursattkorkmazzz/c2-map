@@ -4,7 +4,7 @@ import { StrictMode, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderMap, settle } from '../testing';
 import { MapBasemap } from './map-basemap';
-import { Circle, MapFeature, Marker, MilSymbol, Polygon, Polyline } from './map-feature';
+import { Circle, CompositeFeature, MapFeature, Marker, MilSymbol, Polygon, Polyline } from './map-feature';
 import { MapLayer } from './map-layer';
 import { MapOverlay } from './map-overlay';
 
@@ -229,5 +229,42 @@ describe('<MapOverlay>', () => {
   it('<Map> dışında hata', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<MapOverlay anchor={[0, 0]} />)).toThrow(/<Map> içinde/);
+  });
+});
+
+describe('<CompositeFeature>', () => {
+  it('kind + nokta konumu + props tek unsur olarak yazılır; props değişince güncellenir', async () => {
+    const tree = (pan: number) => (
+      <MapLayer id="gozlem">
+        <CompositeFeature
+          id="gozcu"
+          kind="uav"
+          position={[32.85, 39.93]}
+          props={{ headingDeg: 90, altitudeM: 3500, sensor: { panDeg: pan, tiltDeg: 50, hfovDeg: 25, vfovDeg: 15 } }}
+          deletable={false}
+        />
+      </MapLayer>
+    );
+    const h = await renderMap(tree(0));
+    expect(h.store.getFeature('gozcu')).toMatchObject({
+      kind: 'uav',
+      layerId: 'gozlem',
+      geometry: { kind: 'point', coord: [32.85, 39.93] },
+      props: { headingDeg: 90, sensor: { panDeg: 0 } },
+      deletable: false,
+    });
+    h.rerender(tree(45));
+    await h.frame();
+    expect(h.store.getFeature('gozcu')!.props).toMatchObject({ sensor: { panDeg: 45 } });
+    expect(h.adapter.features.get('gozcu')!.feature.kind).toBe('uav');
+  });
+
+  it('geometry ile de verilebilir', async () => {
+    const h = await renderMap(
+      <MapLayer id="l">
+        <CompositeFeature id="c" kind="convoy" geometry={{ kind: 'line', coords: [[0, 0], [1, 1]] }} props={{ size: 4 }} />
+      </MapLayer>,
+    );
+    expect(h.store.getFeature('c')!.geometry).toEqual({ kind: 'line', coords: [[0, 0], [1, 1]] });
   });
 });

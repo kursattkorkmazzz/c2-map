@@ -44,7 +44,18 @@ export type DeckLayersRenderer = {
   load?(): Promise<void>;
   /** Grubun bu renderer'a düşen unsurları → deck.gl katmanları. */
   layers(features: readonly RenderFeature[], ctx: DeckLayersContext): unknown[];
+  /**
+   * Akıcı hareket (isteğe bağlı): iki mesaj arasındaki hâl, `t` ∈ [0, 1]. Verilirse ve hareket modu
+   * açıksa, yeni mesaj gelince unsur ekrandaki hâlinden yenisine kayar. Süre = mesajlar arası süre.
+   */
+  interpolate?(from: Feature, to: Feature, t: number): Feature;
 };
+
+/** Composite kayması: süre mesaj aralığından, sınırlı. */
+const MIN_GLIDE_MS = 50;
+const MAX_GLIDE_MS = 2000;
+
+type Glide = { from: Feature; to: Feature; start: number; duration: number };
 
 export type DeckRenderer = DeckKindRenderer | DeckLayersRenderer;
 
@@ -111,6 +122,9 @@ export class DeckController {
   private readonly composites = new Map<string, Map<DeckLayersRenderer, Map<string, RenderFeature>>>();
   /** Son flush'ta katman renderer'larının ürettiği katman id'leri (seçim için). */
   private compositeLayerIds: string[] = [];
+  /** Composite kaymaları (unsur id → kayma) ve son mesaj zamanı (süreyi ölçmek için). */
+  private readonly glides = new Map<string, Glide>();
+  private readonly lastMessageAt = new Map<string, number>();
   /** Görsel durumu olan (seçili / hover) birlikler → grubu. */
   private readonly marks = new Map<string, { groupId: string; selected: boolean; hovered: boolean }>();
   private dirty = false;
@@ -170,7 +184,10 @@ export class DeckController {
       if (!byRenderer) this.composites.set(rf.groupId, (byRenderer = new Map()));
       let features = byRenderer.get(renderer);
       if (!features) byRenderer.set(renderer, (features = new Map()));
-      features.set(rf.feature.id, rf);
+      const id = rf.feature.id;
+      const prev = features.get(id);
+      features.set(id, rf);
+      this.glide(id, prev?.feature, rf, renderer);
       this.dirty = true;
       return true;
     }
@@ -205,6 +222,8 @@ export class DeckController {
     const entry = this.groups.get(groupId);
     if (entry?.data.remove(featureId)) this.dirty = true;
     for (const features of this.composites.get(groupId)?.values() ?? []) if (features.delete(featureId)) this.dirty = true;
+    this.glides.delete(featureId);
+    this.lastMessageAt.delete(featureId);
     if (this.marks.delete(featureId)) this.dirty = true;
   }
 
@@ -320,7 +339,7 @@ export class DeckController {
       let index = 0;
       for (const [renderer, features] of this.composites.get(groupId) ?? []) {
         if (features.size === 0) continue;
-        const produced = renderer.layers([...features.values()], {
+        const produced = renderer.layers(this.displayed(features, renderer), {
           groupId,
           idPrefix: `${layerIdOf(groupId)}~${index++}`,
           beforeId: entry.beforeId,
@@ -368,10 +387,48 @@ export class DeckController {
 
   // ── Akıcı hareket ──────────────────────────────────────────────
 
+  /** Yeni composite mesajı: hareket açıksa ekrandaki hâlden yenisine kaymayı başlat. */
+  private glide(id: string, prev: Feature | undefined, rf: RenderFeature, renderer: DeckLayersRenderer): void {
+    const now = this.now();
+    const last = this.lastMessageAt.get(id);
+    this.lastMessageAt.set(id, now);
+    if (!this.smoothing || !renderer.interpolate || !prev || rf.changed === RENDER_CHANGE_ALL || last === undefined) {
+      this.glides.delete(id);
+      return;
+    }
+    const from = this.glideAt(id, renderer, now) ?? prev; // yolun ortasında yeni mesaj: zıplama yok
+    const duration = Math.min(MAX_GLIDE_MS, Math.max(MIN_GLIDE_MS, now - last));
+    this.glides.set(id, { from, to: rf.feature, start: now, duration });
+    this.startAnimation();
+  }
+
+  /** Kaymadaki unsurun şu anki hâli (kayma yoksa / bittiyse `null`). */
+  private glideAt(id: string, renderer: DeckLayersRenderer, now: number): Feature | null {
+    const g = this.glides.get(id);
+    if (!g || !renderer.interpolate) return null;
+    const t = (now - g.start) / g.duration;
+    if (t >= 1) {
+      this.glides.delete(id);
+      return null;
+    }
+    return renderer.interpolate(g.from, g.to, Math.max(0, t));
+  }
+
+  /** Renderer'a verilecek unsurlar: kayanlar ara hâlleriyle. */
+  private displayed(features: Map<string, RenderFeature>, renderer: DeckLayersRenderer): RenderFeature[] {
+    if (this.glides.size === 0) return [...features.values()];
+    const now = this.now();
+    return [...features.values()].map((rf) => {
+      const at = this.glideAt(rf.feature.id, renderer, now);
+      return at ? { ...rf, feature: at } : rf;
+    });
+  }
+
   private applySmoothing(active: boolean): void {
     if (active === this.smoothing) return;
     this.smoothing = active;
     if (!active) {
+      this.glides.clear(); // composite'ler hedef hâlde
       for (const { data } of this.groups.values()) data.snapToTargets(); // zıplama yok: hedefte dur
       this.dirty = true;
       this.flush();
@@ -386,7 +443,8 @@ export class DeckController {
       let moving = false;
       for (const { data } of this.groups.values()) moving = data.animate(time, this.options.durationMs) || moving;
       this.dirty = true;
-      this.flush();
+      this.flush(); // composite kaymaları buildLayers'ta ilerler; bitenler orada silinir
+      moving = moving || this.glides.size > 0;
       if (moving && this.smoothing) this.requestFrame(tick);
       else this.animating = false;
     };

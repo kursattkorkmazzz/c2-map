@@ -8,6 +8,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-14 | Composite akıcı hareketi renderer'ın `interpolate` kancasıyla; kayma süresi sabit değil, mesajlar arası süreden ölçülür | Her composite türü neyin nasıl enterpole edileceğini bilir (açılar en kısa yoldan); farklı mesaj hızlarında (1 Hz birlik, 5 Hz İHA) ayar gerekmez | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | **Composite** = store'da tek unsur, haritada çok parça; ilk örnek İHA (`kind: 'uav'`: model + sensör konisi + iz + etiket). deck.gl'de ikinci renderer türü: `DeckLayersRenderer` (az sayıda zengin unsur) | Backend yalnız unsuru günceller; parçalar türetilir. İkon yolu (50k) bozulmadan zengin görseller | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | Sensör izi (kamera konisinin zemindeki dörtgeni) çekirdekte saf fonksiyon (`sensorFootprint`) | Motor bağımsız; Cesium aynı köşeleri kullanır | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | İHA modeli: "Predator Drone" (sftwr314r8, Poly Pizza, CC BY 3.0) — örnek amaçlı; atıf demo sayfasında ve `ATTRIBUTION.md`'de | CC0 sabit kanatlı İHA bulunamadı; CC BY atıfla kullanılabilir | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
