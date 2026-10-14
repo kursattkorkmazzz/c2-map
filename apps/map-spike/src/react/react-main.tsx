@@ -24,7 +24,8 @@ import {
   type FeatureLifecycle,
   type StreamItem,
 } from '@c2/map-core';
-import { createMaplibreAdapter, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
+import { createMaplibreAdapter, MOTION_MODE, uavRenderer, type DeckIcon, type MotionMode, type UavProps } from '@c2/map-maplibre';
+import { startUavStream, UAV_LAYER, UAV_VIEW } from './uav-sim';
 import {
   Circle,
   DRAW_TOOL_LABELS,
@@ -71,6 +72,8 @@ const sidcOf = (f: Feature) => (f.props as { sidc?: string } | undefined)?.sidc;
 const adapter = createMaplibreAdapter({
   workerUrl,
   deckRenderers: {
+    // Composite: tek unsurdan 3B model + sensör konisi + iz + etiket (deck/uav-renderer.ts)
+    uav: uavRenderer({ modelUrl: `${import.meta.env.BASE_URL}models/predator.glb`, modelScale: 8, minPixels: 46 }),
     milsym: {
       icon: (f) => {
         const sidc = sidcOf(f);
@@ -186,6 +189,22 @@ function UnitCard({ id }: { id: string }) {
       </div>
       <small>kart render: {renders}</small>
     </div>
+  );
+}
+
+function UavTooltip({ id }: { id: string }) {
+  const p = useFeature(id, (f) => f?.props as UavProps | undefined);
+  if (!p) return null;
+  return (
+    <>
+      <b>{p.callsign ?? id}</b> · {Math.round(p.altitudeM)} m · burun {Math.round(p.headingDeg)}°
+      {p.sensor && (
+        <>
+          {' '}
+          · kamera pan {Math.round(p.sensor.panDeg)}° / eğim {Math.round(p.sensor.tiltDeg)}°
+        </>
+      )}
+    </>
   );
 }
 
@@ -340,13 +359,18 @@ function Panel() {
   return (
     <aside id="panel">
       <h1>React testi — @c2/map-react</h1>
+      <p className="hint attribution">
+        İHA modeli: "Predator Drone" — sftwr314r8, <a href="https://poly.pizza/m/3Eio09miiAF">Poly Pizza</a>,{' '}
+        <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>
+      </p>
       <p className="hint">
         {COUNT.toLocaleString('tr-TR')} birlik, 1 Hz · <a href="./core.html">çekirdek sayfası</a>
       </p>
       <BasemapPicker />
       <LayerToggle id="harekat" label="Harekât (kontrol tedbirleri)" />
       <LayerToggle id={UNITS} label="Birlikler" />
-      <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9 })}>Ankara'ya uç</button>
+      <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9, pitchDeg: 0, bearingDeg: 0 })}>Ankara'ya uç</button>{' '}
+      <button onClick={() => map.flyTo(UAV_VIEW)}>İHA'lara git (3B)</button>
       <GoTo />
       <table>
         <tbody>
@@ -364,6 +388,7 @@ function Panel() {
 
 function App() {
   useEffect(startStream, []);
+  useEffect(() => startUavStream(store, 5), []);
   return (
     <Map adapter={adapter} store={store} lifecycle={lifecycle} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
       {BASEMAPS.map((b) => (
@@ -388,6 +413,11 @@ function App() {
 
       {/* Canlı birlikler: içi boş katman; unsurlar akıştan store'a */}
       <MapLayer id={UNITS} name="Birlikler" renderGroup editable={false} deletable={false} />
+      {/* İHA'lar: composite kind 'uav', backend akışından (uav-sim.ts); birliklerin üstünde */}
+      <MapLayer id={UAV_LAYER} name="İHA'lar" renderGroup editable={false} deletable={false} />
+      <MapTooltip layerId={UAV_LAYER} className="unit-tooltip">
+        {(id) => <UavTooltip id={id} />}
+      </MapTooltip>
 
       <SelectedOverlay />
       <MapTooltip layerId={UNITS} className="unit-tooltip">

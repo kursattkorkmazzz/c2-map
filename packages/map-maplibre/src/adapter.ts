@@ -33,7 +33,14 @@ import {
   type RenderGroup,
 } from '@c2/map-core';
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
-import { DeckController, loadDeckModules, type DeckKindRenderer, type DeckModules, type DeckTiming } from './deck/deck-controller';
+import {
+  DeckController,
+  isLayersRenderer,
+  loadDeckModules,
+  type DeckModules,
+  type DeckRenderer,
+  type DeckTiming,
+} from './deck/deck-controller';
 import { MOTION_MODE, type MotionAutoOptions, type MotionMode } from './deck/motion';
 import { DRAW_ANCHOR_LAYER, DRAW_PREVIEW_LAYERS, DRAW_PREVIEW_SOURCE, EMPTY_COLLECTION, previewToGeoJSON } from './draw-preview';
 import { BasemapController, SUPPORTED_BASEMAP_SOURCES, type BasemapStats } from './basemaps';
@@ -77,7 +84,7 @@ export type MaplibreAdapterOptions = {
    * deck.gl ile çizilecek kind'ler (canlı, yoğun unsurlar: birlikler). Aynı kind `renderers`'ta da
    * varsa deck.gl önceliklidir. Boşsa deck.gl hiç yüklenmez.
    */
-  deckRenderers?: Record<string, DeckKindRenderer>;
+  deckRenderers?: Record<string, DeckRenderer>;
   /** Akıcı hareket: `off` (varsayılan) / `on` / `auto` (kare hızına göre). Sonradan `setMotionMode`. */
   motion?: MotionMode;
   /** Akıcı harekette iki konum arası kayma süresi (ms) ≈ mesaj aralığı. Varsayılan 1000. */
@@ -126,7 +133,7 @@ type Engine = 'maplibre' | 'deck';
 
 type ResolvedRenderer =
   | { engine: 'maplibre'; kind: string; renderer: MaplibreKindRenderer; feature: Feature }
-  | { engine: 'deck'; kind: string; renderer: DeckKindRenderer; feature: Feature };
+  | { engine: 'deck'; kind: string; renderer: DeckRenderer; feature: Feature };
 
 const sourceIdOf = (groupId: string) => `c2-src-${groupId}`;
 
@@ -143,7 +150,7 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
   private kinds: FeatureKindRegistry | null = null;
   private pixelRatio = 1;
   private readonly renderers = new Map<string, MaplibreKindRenderer>();
-  private readonly deckRenderers: Map<string, DeckKindRenderer>;
+  private readonly deckRenderers: Map<string, DeckRenderer>;
   private readonly groups = new Map<string, GroupState>();
   private readonly features = new Map<string, FeatureRecord>();
   private readonly detachers: (() => void)[] = [];
@@ -229,6 +236,8 @@ export class MaplibreAdapter implements MapAdapter<MapLike> {
 
     if (this.deckRenderers.size > 0) {
       const modules = await (this.options.loadDeck ?? loadDeckModules)();
+      // Katman renderer'ları (composite: 3B model …) kendi bağımlılıklarını yükler.
+      await Promise.all([...this.deckRenderers.values()].filter(isLayersRenderer).map((r) => r.load?.()));
       this.deck = new DeckController(map, modules, {
         motion: this.options.motion ?? MOTION_MODE.OFF,
         durationMs: this.options.motionDurationMs ?? 1000,

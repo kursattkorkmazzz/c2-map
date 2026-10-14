@@ -67,6 +67,7 @@ describe("@c2/map-core genel API", () => {
         "corridorRing",
         "ellipseRing",
         "shapeRings",
+        "sensorFootprint",
         "COORD_FORMAT",
         "HEMISPHERES",
         "UTM_BANDS",

@@ -25,12 +25,39 @@ export function deckIconRenderer(options: DeckKindRenderer): DeckKindRenderer {
   return options;
 }
 
+export type DeckLayersContext = {
+  groupId: string;
+  /** Bu renderer'ın katman id öneki (benzersiz); katman id'leri `${idPrefix}-…` olmalı. */
+  idPrefix: string;
+  /** Katmanlara verilecek MapLibre `beforeId` (grup sırası). */
+  beforeId: string | undefined;
+};
+
+/**
+ * Az sayıda, zengin unsur (composite: 3B model + koni + etiket …) için: unsurlarından kendi deck.gl
+ * katmanlarını üretir. İkon yolunun aksine typed array yok; her değişiklikte katmanlar baştan
+ * kurulur (onlarca unsur için ucuz). Seçim / hover için katman veri nesnelerinde `featureId` olmalı.
+ */
+export type DeckLayersRenderer = {
+  readonly type: 'layers';
+  /** Mount'ta bir kez beklenir (ör. katman sınıflarını dinamik import et, modeli ön yükle). */
+  load?(): Promise<void>;
+  /** Grubun bu renderer'a düşen unsurları → deck.gl katmanları. */
+  layers(features: readonly RenderFeature[], ctx: DeckLayersContext): unknown[];
+};
+
+export type DeckRenderer = DeckKindRenderer | DeckLayersRenderer;
+
+export const isLayersRenderer = (renderer: DeckRenderer): renderer is DeckLayersRenderer =>
+  (renderer as DeckLayersRenderer).type === 'layers';
+
 /** Adapter'ın kullandığı deck.gl yüzü (gerçekte `@deck.gl/maplibre` + `@deck.gl/layers`). */
 export interface DeckOverlayLike {
   setProps(props: { layers: unknown[] }): void;
   pickObject(params: { x: number; y: number; radius?: number; layerIds?: string[] }): {
     index: number;
     layer?: { id: string } | null;
+    object?: unknown;
   } | null;
   finalize?(): void;
 }
@@ -80,6 +107,10 @@ type GroupEntry = {
 export class DeckController {
   readonly overlay: DeckOverlayLike;
   private readonly groups = new Map<string, GroupEntry>();
+  /** Katman renderer'larının unsurları: grup → renderer → id → son RenderFeature. */
+  private readonly composites = new Map<string, Map<DeckLayersRenderer, Map<string, RenderFeature>>>();
+  /** Son flush'ta katman renderer'larının ürettiği katman id'leri (seçim için). */
+  private compositeLayerIds: string[] = [];
   /** Görsel durumu olan (seçili / hover) birlikler → grubu. */
   private readonly marks = new Map<string, { groupId: string; selected: boolean; hovered: boolean }>();
   private dirty = false;
@@ -132,8 +163,17 @@ export class DeckController {
   // ── Unsurlar ───────────────────────────────────────────────────
 
   /** Unsuru deck tarafında ekler/günceller. İkonu yoksa `false` (çizilmedi). */
-  upsert(rf: RenderFeature, renderer: DeckKindRenderer): boolean {
+  upsert(rf: RenderFeature, renderer: DeckRenderer): boolean {
     const entry = this.groupEntry(rf.groupId);
+    if (isLayersRenderer(renderer)) {
+      let byRenderer = this.composites.get(rf.groupId);
+      if (!byRenderer) this.composites.set(rf.groupId, (byRenderer = new Map()));
+      let features = byRenderer.get(renderer);
+      if (!features) byRenderer.set(renderer, (features = new Map()));
+      features.set(rf.feature.id, rf);
+      this.dirty = true;
+      return true;
+    }
     const isNew = !entry.data.has(rf.feature.id);
     const all = isNew || rf.changed === RENDER_CHANGE_ALL;
     const update: Parameters<DeckGroupData['upsert']>[1] = {};
@@ -164,6 +204,7 @@ export class DeckController {
   remove(featureId: string, groupId: string): void {
     const entry = this.groups.get(groupId);
     if (entry?.data.remove(featureId)) this.dirty = true;
+    for (const features of this.composites.get(groupId)?.values() ?? []) if (features.delete(featureId)) this.dirty = true;
     if (this.marks.delete(featureId)) this.dirty = true;
   }
 
@@ -178,6 +219,7 @@ export class DeckController {
 
   removeGroup(groupId: string): void {
     if (!this.groups.delete(groupId)) return;
+    this.composites.delete(groupId);
     for (const [id, mark] of this.marks) if (mark.groupId === groupId) this.marks.delete(id);
     this.dirty = true;
   }
@@ -194,14 +236,18 @@ export class DeckController {
     this.overlay.setProps({ layers: this.buildLayers() });
   }
 
-  /** Ekran noktasındaki en üstteki birlik. */
+  /** Ekran noktasındaki en üstteki deck unsuru. */
   pick(point: { x: number; y: number }): string | undefined {
-    const layerIds = [...this.groups.keys()].map(layerIdOf);
+    const iconLayers = new Map([...this.groups.keys()].map((groupId) => [layerIdOf(groupId), groupId]));
+    const layerIds = [...iconLayers.keys(), ...this.compositeLayerIds];
     if (layerIds.length === 0) return undefined;
     const info = this.overlay.pickObject({ x: point.x, y: point.y, radius: 4, layerIds });
     if (!info || info.index < 0 || !info.layer) return undefined;
-    const groupId = info.layer.id.slice('c2-deck-'.length);
-    return this.groups.get(groupId)?.data.ids[info.index];
+    // Katman renderer'ı: veri nesnesi kendi unsur id'sini taşır
+    const objectId = (info.object as { featureId?: unknown } | null | undefined)?.featureId;
+    if (typeof objectId === 'string') return objectId;
+    const groupId = iconLayers.get(info.layer.id);
+    return groupId === undefined ? undefined : this.groups.get(groupId)?.data.ids[info.index];
   }
 
   /**
@@ -236,6 +282,7 @@ export class DeckController {
     const { IconLayer, ScatterplotLayer } = this.modules;
     const ordered = [...this.groups].sort(([a], [b]) => this.options.orderOf(a) - this.options.orderOf(b));
     const layers: unknown[] = [];
+    const compositeLayerIds: string[] = [];
 
     for (const [groupId, entry] of ordered) {
       const { data } = entry;
@@ -268,10 +315,27 @@ export class DeckController {
           },
         }),
       );
+
+      // Composite unsurlar: aynı grupta, ikonların üstünde
+      let index = 0;
+      for (const [renderer, features] of this.composites.get(groupId) ?? []) {
+        if (features.size === 0) continue;
+        const produced = renderer.layers([...features.values()], {
+          groupId,
+          idPrefix: `${layerIdOf(groupId)}~${index++}`,
+          beforeId: entry.beforeId,
+        });
+        for (const layer of produced) {
+          const id = (layer as { id?: unknown }).id;
+          if (typeof id === 'string') compositeLayerIds.push(id);
+          layers.push(layer);
+        }
+      }
     }
+    this.compositeLayerIds = compositeLayerIds;
 
     const marks = [...this.marks].flatMap(([id, mark]) => {
-      const coord = this.groups.get(mark.groupId)?.data.coordOf(id);
+      const coord = this.groups.get(mark.groupId)?.data.coordOf(id) ?? this.compositeCoord(id, mark.groupId);
       return coord ? [{ coord, mark }] : [];
     });
     if (marks.length > 0) {
@@ -292,6 +356,14 @@ export class DeckController {
       );
     }
     return layers;
+  }
+
+  private compositeCoord(id: string, groupId: string): [number, number] | undefined {
+    for (const features of this.composites.get(groupId)?.values() ?? []) {
+      const rf = features.get(id);
+      if (rf) return representativePoint(rf.feature.geometry).coordinates as [number, number];
+    }
+    return undefined;
   }
 
   // ── Akıcı hareket ──────────────────────────────────────────────

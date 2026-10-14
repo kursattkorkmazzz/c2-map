@@ -17,6 +17,10 @@
     "@deck.gl/core": "^9.4.0",
     "@deck.gl/layers": "^9.4.0",
     "@deck.gl/maplibre": "^9.4.0",
+    "@deck.gl/mesh-layers": "^9.4.0",
+    "@loaders.gl/core": "^4.5.4",
+    "@loaders.gl/gltf": "^4.5.4",
+    "@luma.gl/gltf": "9.4.2",
     "maplibre-gl": "^6.14.0"
   },
   "devDependencies": {

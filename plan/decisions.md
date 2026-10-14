@@ -8,6 +8,9 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-14 | **Composite** = store'da tek unsur, haritada çok parça; ilk örnek İHA (`kind: 'uav'`: model + sensör konisi + iz + etiket). deck.gl'de ikinci renderer türü: `DeckLayersRenderer` (az sayıda zengin unsur) | Backend yalnız unsuru günceller; parçalar türetilir. İkon yolu (50k) bozulmadan zengin görseller | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
+| 2026-10-14 | Sensör izi (kamera konisinin zemindeki dörtgeni) çekirdekte saf fonksiyon (`sensorFootprint`) | Motor bağımsız; Cesium aynı köşeleri kullanır | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
+| 2026-10-14 | İHA modeli: "Predator Drone" (sftwr314r8, Poly Pizza, CC BY 3.0) — örnek amaçlı; atıf demo sayfasında ve `ATTRIBUTION.md`'de | CC0 sabit kanatlı İHA bulunamadı; CC BY atıfla kullanılabilir | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | Düzenleme çekirdekte (`EditController` + saf tutamaçlar), çizimle aynı tıklama tabanlı etkileşim; adapter sözleşmesinden `editFeature` / `EditSession` kaldırıldı | Karar #8 (B) düzenlemeye de uygulandı: her motor aynı düzenlemeyi alır | [09](design/09-interaction-and-editing.md#düzenleme-faz-252) |
 | 2026-10-14 | Taslak varken akıştan gelen güncelleme haritaya çizilmez, yalnız abonelere gider; "başkası değiştirdi" = asıl kayıt taslağın tabanından farklı | Kullanıcının düzenlediği şekil elinin altından kaymasın; çakışmaya backend karar versin | [09](design/09-interaction-and-editing.md#düzenleme-faz-252) |
 | 2026-10-14 | **İzinler:** `editable` / `deletable` bayrakları (unsur + katman, zincir); **varsayılan açık**, yalnız açıkça `false` kapatır | Hatayla eklenen bir çizim kaldırılamaz olmamalı; backend'in sürdüğü veriyi yazan taraf açıkça kapatır | [09](design/09-interaction-and-editing.md#izinler-ve-yaşam-döngüsü) |

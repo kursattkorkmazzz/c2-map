@@ -52,6 +52,51 @@ export type SymbolImage = {
   aynı arayüzü uygulayan yeni paket.
 - Görüntüler lazy üretilir ve önbelleklenir ([04](04-sync-and-rendering.md#askeri-semboller-ve-ikonlar)).
 
+## Composite unsur: İHA
+
+> 2026-10-14 — Faz 4.1'den öne alındı; ilk örnek `kind: 'uav'`. Kod: `map-core/src/geo/sensor.ts`,
+> `map-maplibre/src/deck/uav-renderer.ts`; demo `apps/map-spike` (`react.html`, "İHA'lara git (3B)").
+
+**Composite = store'da TEK unsur, haritada birden çok görsel parça.** Backend yalnız unsuru
+günceller (konum, yön, irtifa, sensör); parçalar her güncellemede renderer'da yeniden üretilir.
+Seçim / hover / sağ tık / izinler unsurun kendisine aittir (parçalara değil).
+
+```ts
+{ id: 'iha-1', layerId: 'ihalar', kind: 'uav',
+  geometry: { kind: 'point', coord: [lon, lat] },
+  props: {
+    headingDeg: 329,          // burun yönü (kuzeyden saat yönü)
+    altitudeM: 2800,          // yerden yükseklik
+    callsign: 'TB2-3',
+    sensor: { panDeg: 45, tiltDeg: 53, hfovDeg: 18, vfovDeg: 12, maxRangeM: 25000 },
+  } }
+```
+
+| Parça | deck.gl katmanı | Kaynak |
+|---|---|---|
+| 3B model | `ScenegraphLayer` (glTF) | konum + irtifa + `headingDeg` |
+| Sensör konisi | `SolidPolygonLayer` (`_full3d`), 4 yarı saydam üçgen | tepe İHA'da, taban zemindeki iz |
+| Zemindeki iz | `SolidPolygonLayer` | `sensorFootprint` köşeleri |
+| Çizgiler | `LineLayer` | koni kenarları, bakış ekseni (kırmızı), İHA → zemin dikey çizgi |
+| Etiket | `TextLayer` | çağrı adı + irtifa |
+
+- **Sensör izi çekirdekte** (`sensorFootprint`, saf, motor bilmez): bakış azimutu = burun + pan;
+  eğim = ufkun altına bakış; görüş dörtgeninin dört köşe ışını yerel ENU'da kurulup düz zeminle
+  kesiştirilir. Ufka yakın / üstüne bakan ışın `maxRangeM`'de kesilir (`clipped`). Cesium da aynı
+  köşeleri kullanır.
+- **deck.gl "katman renderer'ı"** (`DeckLayersRenderer`, `type: 'layers'`): ikon yolunun (50k,
+  typed array) yanında ikinci tür. Az sayıda zengin unsur için: unsurlarından kendi katmanlarını
+  üretir, `load()` mount'ta beklenir (katman sınıfları + glTF yükleyici dinamik import). Seçim için
+  veri nesneleri `featureId` taşır. Grup sırası (`beforeId`) ve seçim halkası denetleyiciden gelir.
+- **Model ekseni:** glTF +Z burun, +Y yukarı kabul edilir; dönüş `[0, 180 + yawOffset − heading, 90]`
+  (tarayıcıda doğrulandı). Farklı eksenli model `yawOffsetDeg` ile düzeltilir. Ölçek
+  `modelScale` (birim → metre) + uzaktan görünürlük için `minPixels`.
+- **Yarı saydam yüzeyler** derinliğe yazmaz (`depthWriteEnabled: false`): koni yüzleri birbirini
+  ve modeli kesip delik bırakmasın.
+- **3B görünüm** MapLibre eğimiyle (2,5B): arazi yok, irtifa düz zemine göre. Gerçek arazi / küre
+  Faz 5 (Cesium).
+- Model: "Predator Drone" — sftwr314r8, Poly Pizza, CC BY 3.0 (`apps/map-spike/public/models/ATTRIBUTION.md`).
+
 ## Koordinat sistemleri
 
 - Kanonik: WGS84 `[lon, lat, alt?]`. Adapter kendi projeksiyonunu yönetir.

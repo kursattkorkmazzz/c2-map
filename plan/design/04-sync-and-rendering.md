@@ -132,8 +132,12 @@ Paint: `['case', ['boolean', ['feature-state', 'selected'], false], seçiliRenk,
 
 ### Composite
 
-`encode` birden çok parça döndürür (`${id}#icon`, `${id}#ring`, `${id}#label`), hepsi
-`_fid = id` taşır. Hit-test `_fid` üzerinden asıl unsura döner; seçim tüm parçalara uygulanır.
+İki yol:
+
+- **MapLibre:** `encode` birden çok parça döndürür (`${id}#icon`, `${id}#ring`, `${id}#label`), hepsi
+  `_fid = id` taşır. Hit-test `_fid` üzerinden asıl unsura döner; seçim tüm parçalara uygulanır.
+- **deck.gl katman renderer'ı** (3B model, koni gibi zengin parçalar): renderer unsurlarından kendi
+  katmanlarını üretir; ilk örnek İHA — [08](08-extensibility-symbology.md#composite-unsur-iha).
 
 ## deck.gl yolu
 

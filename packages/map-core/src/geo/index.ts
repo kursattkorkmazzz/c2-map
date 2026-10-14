@@ -13,6 +13,7 @@ export {
 } from "./utm";
 export { parseMgrs, toMgrs, type MgrsOptions, type MgrsPoint } from "./mgrs";
 export { corridorRing, ellipseRing, shapeRings } from "./shapes";
+export { sensorFootprint, type SensorFootprint, type SensorParams } from "./sensor";
 export {
   COORD_FORMAT,
   formatAngle,

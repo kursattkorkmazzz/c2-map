@@ -11,14 +11,19 @@ export {
 } from './adapter';
 export {
   deckIconRenderer,
+  isLayersRenderer,
   loadDeckModules,
   type DeckKindRenderer,
+  type DeckLayersContext,
+  type DeckLayersRenderer,
+  type DeckRenderer,
   type DeckModules,
   type DeckOverlayLike,
   type DeckStats,
   type DeckTiming,
 } from './deck/deck-controller';
 export type { DeckIcon } from './deck/deck-group';
+export { uavRenderer, type UavProps, type UavRendererOptions } from './deck/uav-renderer';
 export { MOTION_MODE, MotionGovernor, type MotionAutoOptions, type MotionMode } from './deck/motion';
 export { SUPPORTED_BASEMAP_SOURCES, toSourceSpec, type BasemapStats } from './basemaps';
 export { STANDARD_PROPS, type EncodedPart, type PropertyValue } from './encode';

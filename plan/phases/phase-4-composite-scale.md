@@ -9,7 +9,10 @@
 
 ## 4.1 Composite
 Tasarım: [04](../design/04-sync-and-rendering.md#composite)
-- [ ] `composite` kind: çok parçalı encode, `_fid` ile hit-test, seçim tüm parçalara
+- [x] MapLibre: çok parçalı encode, `_fid` ile hit-test, seçim tüm parçalara (Faz 1.1'de geldi)
+- [x] deck.gl katman renderer'ı (`DeckLayersRenderer`) + ilk composite: **İHA** (`kind: 'uav'`: 3B model, sensör konisi, zemin izi, etiket) — öne alındı 2026-10-14, [08](../design/08-extensibility-symbology.md#composite-unsur-iha)
+- [ ] Composite parçalarında akıcı hareket (İHA şimdilik 5 Hz mesajla; deck transitions veya ara konum)
+- [ ] `<CompositeFeature>` React kısayolu
 
 ## 4.2 Kümeleme
 Tasarım: [04](../design/04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası)
