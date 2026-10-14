@@ -9,3 +9,4 @@ export * from "./registry/index";
 export * from "./adapter/index";
 export * from "./sync/index";
 export * from "./ingest/index";
+export * from "./geo/index";

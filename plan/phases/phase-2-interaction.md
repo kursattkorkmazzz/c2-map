@@ -5,7 +5,7 @@
 **Amaç:** Operasyonel etkileşim: seçim, hover, bağlam menüsü, overlay, çizim ve güvenli düzenleme.
 
 ## Açık kararlar (başlamadan)
-- [ ] #8 Çizim: kütüphane mi, çekirdekte kendi araçlarımız mı → mimari önerisi [09](../design/09-interaction-and-editing.md#çizim-mimarisi-öneri) (onay bekliyor)
+- [x] #8 Çizim → **B: sözleşme + araçlar çekirdekte, adapter yalnız girdi + kilit** ([09](../design/09-interaction-and-editing.md#çizim-mimarisi-öneri), 2026-10-14). Çizim arayüzü (araç çubuğu vb.) 2.4'e başlarken netleştirilecek
 - [x] #20 Taslak (draft) nerede yaşar → **store'da `drafts` haritası** (2026-10-14)
 
 ## 2.1 Seçim ve hover
@@ -24,8 +24,13 @@ Durum: ✅ — [Faz 1.4](phase-1-2d-mvp.md#14-c2map-react)'te öne alındı (se�
 
 ## 2.3 Koordinat yardımcıları
 Tasarım: [08](../design/08-extensibility-symbology.md#koordinat-sistemleri)
-- [ ] MGRS ↔ lon/lat, UTM, DMS/DD format
-- [ ] Mesafe / alan (jeodezik)
+Durum: ✅ (kod: `packages/map-core/src/geo/`, 24 test; tarayıcıda `react.html` imleç koordinatı + "koordinata git")
+- [x] UTM ↔ lon/lat (Krüger 6. derece; 5000 noktada gidiş-dönüş ≤ 5 nm); Norveç / Svalbard istisnaları; metin bant harfiyle ("36S …")
+- [x] MGRS ↔ lon/lat (hassasiyet 0–5, kesme kuralı; okumada karenin merkezi + güneybatı köşesi); 2000 rastgele noktada `mgrs` kütüphanesiyle karşılaştırıldı (yalnız testte)
+- [x] DD / DM / DMS biçimleri, İngilizce (N S E W) veya Türkçe (K G D B) yön harfleri
+- [x] `parseCoordinate`: serbest metin (MGRS / UTM / DD / DM / DMS, virgüllü ondalık, enlem önce)
+- [x] Mesafe / yön / hedef nokta / çizgi uzunluğu / poligon alanı (delikli) / jeodezik daire — `geographiclib-geodesic`
+- [ ] (Sonraya) Kutuplar (UPS, |enlem| > 80–84°) kapsam dışı; MapLibre adapter'ın daire poligonu `geodesicCircle`'a geçirilebilir
 
 ## 2.4 Çizim
 - [ ] Kütüphane entegrasyonu (adapter `startDraw`, `capabilities.draw`)

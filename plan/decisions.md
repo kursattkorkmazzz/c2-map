@@ -8,6 +8,9 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-14 | **#8 Çizim mimarisi: B** — `DrawSession` sözleşmesi ve çizim araçları çekirdekte (TS durum makineleri); çizilen şekil store'da taslak; adapter yalnız işaretçi olayları + "kaydırma kilidi" sağlar. Motor kütüphanesi (ör. terra-draw) gerekirse aynı sözleşmeyi uygulayan alternatif olarak adapter içine takılır. Çizim arayüzü (araç çubuğu) 2.4'te netleşecek | Her motor (MapLibre, Cesium) çizimi bedavaya alır; askeri kontrol tedbiri araçları tek yerde | [09](design/09-interaction-and-editing.md#çizim-mimarisi-öneri) |
+| 2026-10-14 | Jeodezik hesaplar `geographiclib-geodesic` ile (çekirdeğin ilk çalışma zamanı bağımlılığı); UTM / MGRS / DMS elle yazıldı, `mgrs` yalnız test referansı | Elipsoid üzerinde alan / mesafe kesin olmalı; UTM API'si ve Türkçe biçimler hiçbir hazır pakette yok | [08](design/08-extensibility-symbology.md#koordinat-sistemleri) |
+| 2026-10-14 | UTM metni bant harfiyle ("36S …"), yarımküre harfiyle değil | Askeri alışkanlık ve MGRS grid zone ile aynı; Türkiye S bandında — "S = güney" ile karışmasın diye yarımküre biçimi okunmaz | [08](design/08-extensibility-symbology.md#koordinat-sistemleri) |
 | 2026-10-14 | **#20 Taslak (draft) store'da `drafts` haritasında** | Motor bağımsız; backend güncellemesi asıl kaydı değiştirir, taslak kaymaz; React taslağı okuyabilir | [09](design/09-interaction-and-editing.md#düzenleme-ve-eşzamanlılık) |
 | 2026-10-14 | LayerTree (Faz 1.6) sonraya; Faz 2'ye geçildi | Kullanıcı önceliği | [phase-2](phases/phase-2-interaction.md) |
 | 2026-10-14 | Varsayılan seçim kuralı: tıkla = tek, Ctrl/⌘ = toggle, Shift = ekle; olaylarda motordan bağımsız `modifiers` | Masaüstü alışkanlığı; uygulama motor olayına bakmasın | [09](design/09-interaction-and-editing.md#etkileşim) |
@@ -38,7 +41,7 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | # | Konu | Durum | Ne zaman gerekli |
 |---|---|---|---|
-| 8 | Çizim: kütüphane mi, çekirdekte kendi araçlarımız mı | ⏳ Öneri: sözleşme + araçlar çekirdekte, adapter yalnız girdi + kilit ([09](design/09-interaction-and-editing.md#çizim-mimarisi-öneri)) | Faz 2.4 |
+| 8 | Çizim mimarisi | ✅ B: araçlar çekirdekte, adapter girdi + kilit ([09](design/09-interaction-and-editing.md#çizim-mimarisi-öneri)); ⏳ çizim arayüzü 2.4'te | Faz 2.4 |
 | 10 | Backend mesaj formatı | ✅ İkisi de; en kötü durum (tam nesne) esas. ⏳ Hâlâ açık: `rev`/`ts` var mı, snapshot endpoint'i nasıl? | Faz 1 (ingest) |
 | 11 | Güncelleme frekansı | ✅ ≤ 1 Hz / tavan 10 Hz | — |
 | 13 | Vektör stil altlıkları | ⏳ Birden fazla vektör stilini aynı anda açma (glyph/sprite çakışması) | Faz 4 |

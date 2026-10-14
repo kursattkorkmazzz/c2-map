@@ -220,7 +220,14 @@ importers:
         version: 8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15)
 
   packages/map-core:
+    dependencies:
+      geographiclib-geodesic:
+        specifier: 2.2.0
+        version: 2.2.0
     devDependencies:
+      mgrs:
+        specifier: 2.2.0
+        version: 2.2.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -229,7 +236,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.0.3
-        version: 5.0.3(@types/node@25.9.9)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15))
+        version: 5.0.3(@types/node@25.9.9)(jsdom@30.1.2)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15))
 
   packages/map-maplibre:
     dependencies:
@@ -1086,6 +1093,9 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  geographiclib-geodesic@2.2.0:
+    resolution: {integrity: sha512-cIedo9VTYb0DFufodgibDmVfsWe9EASqb/kUByl09xc6PZYvLvlc89BHCThtGTPf2OII/zWJGxsR3Uz6O7QOVw==}
+
   gl-matrix@3.4.4:
     resolution: {integrity: sha512-latSnyDNt/8zYUB6VIJ6PCh2jBjJX6gnDsoCZ7LyW7GkqrD51EWwa9qCoGixj8YqBtETQK/xY7OmpTF8xz1DdQ==}
 
@@ -1208,6 +1218,9 @@ packages:
 
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
+
+  mgrs@2.2.0:
+    resolution: {integrity: sha512-BHeewhEJ1n2MOFKvGXFPMxgfczWArFGltBYSZ+JTzlNfHSwJ7gEsXGXFjaU619yLmpmtyoLHu+d8Sd6ACsd0QA==}
 
   milsymbol@3.0.4:
     resolution: {integrity: sha512-Jrs1RBCag2IzyEJwI476i2+pNHdi8WMwAp2mDD23g3TR48ERdHmdQgPXZUosRKyhPMr58/eOPyyLE53lMPPAgw==}
@@ -2151,6 +2164,8 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  geographiclib-geodesic@2.2.0: {}
+
   gl-matrix@3.4.4: {}
 
   html-encoding-sniffer@7.0.0:
@@ -2273,6 +2288,8 @@ snapshots:
       tinyqueue: 3.0.0
 
   mdn-data@2.27.1: {}
+
+  mgrs@2.2.0: {}
 
   milsymbol@3.0.4: {}
 
@@ -2448,7 +2465,7 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.23.15
 
-  vitest@5.0.3(@types/node@25.9.9)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15)):
+  vitest@5.0.3(@types/node@25.9.9)(jsdom@30.1.2)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.3(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(tsx@4.23.15))
@@ -2466,6 +2483,7 @@ snapshots:
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 25.9.9
+      jsdom: 30.1.2
     transitivePeerDependencies:
       - msw
 

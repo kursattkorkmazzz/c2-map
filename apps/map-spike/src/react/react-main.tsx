@@ -10,7 +10,12 @@ import './react.css';
 import {
   createLayerStream,
   createMapStore,
+  distance,
+  formatCoordinate,
+  formatDistance,
   GEOMETRY_KIND,
+  parseCoordinate,
+  toMgrs,
   MAP_EVENT,
   SELECT_MODE,
   STREAM_FORMAT,
@@ -210,6 +215,35 @@ function BasemapPicker() {
   );
 }
 
+/** Fare altındaki koordinat (MGRS + DMS) — React render'ı yok, DOM'a doğrudan. */
+function PointerCoordinate() {
+  const el = useRef<HTMLTableCellElement>(null);
+  useMapEvent(MAP_EVENT.POINTER_MOVE, (e) => {
+    if (!e.coord || !el.current) return;
+    el.current.textContent = `${toMgrs(e.coord)}\n${formatCoordinate(e.coord, { hemispheres: 'tr' })}`;
+  });
+  return <td ref={el} className="coord" />;
+}
+
+function GoTo() {
+  const map = useMap();
+  const [message, setMessage] = useState('');
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const coord = parseCoordinate(new FormData(e.currentTarget).get('q') as string);
+        if (!coord) return setMessage('tanınmadı');
+        setMessage(`Ankara'ya ${formatDistance(distance([32.85, 39.9], coord))}`);
+        map.flyTo({ center: coord, zoom: 12 });
+      }}
+    >
+      <input name="q" placeholder="MGRS / UTM / DMS / DD" />
+      <button>Git</button> <small className="goto-message">{message}</small>
+    </form>
+  );
+}
+
 function SelectionCount() {
   return <>{useSelection().selected.size}</>;
 }
@@ -248,12 +282,14 @@ function Panel() {
       <LayerToggle id="harekat" label="Harekât (kontrol tedbirleri)" />
       <LayerToggle id={UNITS} label="Birlikler" />
       <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9 })}>Ankara'ya uç</button>
+      <GoTo />
       <table>
         <tbody>
           <tr><td>FPS (sayfa)</td><td>{fps}</td></tr>
           <tr><td>Panel render</td><td>{renders}</td></tr>
           <tr><td>Son tıklama</td><td>{lastClick}</td></tr>
           <tr><td>Seçili</td><td><SelectionCount /></td></tr>
+          <tr><td>İmleç</td><PointerCoordinate /></tr>
         </tbody>
       </table>
     </aside>

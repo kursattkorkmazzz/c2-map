@@ -19,14 +19,14 @@
 
 ## Çizim mimarisi (öneri)
 
-> Karar #8 — onay bekliyor (2026-10-14).
+> Karar #8 — **B onaylandı** (2026-10-14). Çizim arayüzü (kendi araç çubuğumuz olabilir) 2.4'e başlarken netleşecek.
 
 Sözleşme çekirdekte, uygulama adapter'da: `MapAdapter.startDraw(kind) → DrawSession`,
 `editFeature(id)`, `capabilities.draw`. Asıl soru, işin ne kadarının çekirdekte olacağı:
 
 - **A) Kalın adapter:** çekirdek yalnız sözleşme + ortak geometri hesapları + taslak; çizimi
   adapter yapar (içeride terra-draw veya kendi kodu). Cesium'da yeniden yazılır.
-- **B) İnce adapter (önerilen):** çizim araçları (nokta / çizgi / poligon / daire / dikdörtgen,
+- **B) İnce adapter (seçilen):** çizim araçları (nokta / çizgi / poligon / daire / dikdörtgen,
   askeri tedbirler) çekirdekte TS durum makineleri. Çizilen şekil store'da taslak unsur olarak
   durur, mevcut renderer'larla çizilir. Adapter'dan yalnız işaretçi olayları (koordinatlı; sürükleme
   eklenecek) ve "çizerken haritayı kaydırma" kilidi istenir. Her motor çizimi bedavaya alır.

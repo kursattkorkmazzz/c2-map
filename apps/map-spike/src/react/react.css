@@ -49,6 +49,17 @@
   background: #2f3a47;
 }
 
+#panel td.coord {
+  white-space: pre;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  text-align: right;
+}
+
+#panel form input {
+  width: 170px;
+}
+
 #panel button {
   margin: 6px 0;
 }

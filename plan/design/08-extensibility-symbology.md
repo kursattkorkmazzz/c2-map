@@ -55,6 +55,17 @@ export type SymbolImage = {
 ## Koordinat sistemleri
 
 - Kanonik: WGS84 `[lon, lat, alt?]`. Adapter kendi projeksiyonunu yönetir.
-- `@c2/map-core` util (Faz 2): MGRS ↔ lon/lat, UTM, DMS/DD format.
-- Mesafe/alan: haversine + jeodezik. `CIRCLE.radiusM` metredir; MapLibre'de encode sırasında
-  poligona çevrilir (zoom'dan bağımsız doğru yarıçap).
+- `@c2/map-core` `geo/` (Faz 2.3 ✅):
+  - **UTM** — Krüger serisi (6. derece), elle yazıldı: zone içinde nm düzeyinde gidiş-dönüş.
+    Kapsam -80°..84° (kutuplar UPS ister, kapsam dışı). Norveç / Svalbard zone istisnaları.
+    Metin **bant harfiyle** yazılır ("36S 684296 4420004"): "S" güney değil S bandıdır (Türkiye).
+  - **MGRS** — rakamlar kesilir (yuvarlanmaz); okuma karenin merkezini ve güneybatı köşesini
+    döner. Satır harfi 2000 km periyotlu olduğundan kuzey, bandın güney kenarından bulunur.
+    Doğrulama: `mgrs` kütüphanesi yalnız testte referans (çalışma zamanı bağımlılığı değil).
+  - **DD / DM / DMS** — yön harfleri İngilizce (N S E W) veya Türkçe (K G D B). İnsan metni
+    **enlem önce**; fonksiyonlar `[lon, lat]` döner. `parseCoordinate` "koordinata git"
+    kutusu içindir: MGRS, UTM, DD, DM, DMS; virgüllü ondalık; yön harfi yoksa enlem önce.
+- Mesafe / yön / hedef nokta / alan: **`geographiclib-geodesic`** (Karney; çekirdeğin tek
+  çalışma zamanı bağımlılığı). Küre formülleri (haversine) %0,3'e kadar hata verir — menzil ve
+  alan ölçümünde kabul edilmez. `CIRCLE.radiusM` metredir; MapLibre'de encode sırasında
+  poligona çevrilir (zoom'dan bağımsız doğru yarıçap). Çekirdekte `geodesicCircle` de var.
