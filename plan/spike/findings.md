@@ -214,6 +214,46 @@ Sonuç: en kötü durum çalışıyor, harita tarafı etkilenmiyor; bedeli ana t
 Kalıcı çözüm: Faz 3.6 ingest Worker'ı tam nesneyi ana thread'e göndermeden önce patch'e çevirebilir
 (son durumu Worker tutar) → ana thread her zaman ucuz yolda kalır.
 
+## Ingest Worker (Faz 3.6, 2026-10-14)
+
+`core.html?engine=deck&n=50000&ingest=main|worker&transport=json|clone&payload=verbose`. Mesajlar gerçek
+WebSocket gibi JSON metni (stringify "backend"in işi, ölçülmez). Ölçüm ana thread'de: "ingest" =
+parse + normalize + store (main) veya paketi açma + store (worker; açma süresi dahil — Chromium
+structured clone'u `event.data`'ya ilk erişimde açar, ilk ölçümde bu dışarıda kalmıştı). Headless
+Edge, gerçek GPU; 8 örneğin medyanı (ms / sn).
+
+**Küçük mesaj** (`{id, lon, lat, hdg}`):
+
+| | ingest | flush | toplam |
+|---|---|---|---|
+| ana thread, tam nesne | 122 | 88 | 211 |
+| Worker + clone, tam nesne | 246 | 91 | 358 |
+| Worker + JSON, tam nesne | 145 | 94 | 240 |
+| ana thread, patch | 117 | 92 | 207 |
+| Worker + JSON, patch | 149 | 92 | 242 |
+
+**Kalabalık mesaj** (`payload=verbose`: + telemetri, durum, metin, kaynak — haritanın kullanmadığı alanlar):
+
+| | ingest | toplam | FPS | en uzun kare |
+|---|---|---|---|---|
+| ana thread | 270 | 365 | 99 | 67 ms |
+| **Worker + JSON** | **134** | **215** | **116** | 42 ms |
+| Worker + clone | 209 | 301 | 111 | 34 ms |
+
+Çıkarımlar:
+
+1. **Worker'ın değeri backend mesajına bağlı.** Kalabalık JSON'da ingest yarıya iner (parse + ayıklama
+   Worker'da). Küçük mesajda paketi ana thread'de açmak, ham mesajı ana thread'de işlemekten ucuz
+   değil → Worker isteğe bağlı kalır.
+2. **JSON metin taşıması structured clone'dan ucuz** (246 → 145) → varsayılan `json`.
+3. **Asıl kazanç bir store düzeltmesi:** CPU profili, store'un her unsur için `performance.now()`
+   çağırdığını gösterdi (~50 ms/sn). Saat transaction başına bir kez okunuyor → ana thread ingest'i
+   186 → 122 ms/sn (iki modda da).
+4. Profilde ayrıca: birliklerin %1'inin sembolü değişince deck.gl 50k ikonun hepsini yeniden çözüyor
+   (~60 ms/sn) → [Faz 1.5](../phases/phase-1.5-perf.md) maddesi.
+5. Tabanı store uygulaması belirliyor (Worker'da bile ~100+ ms/sn): daha fazlası için konum
+   güncellemelerinde ikili (transferable) hızlı yol gerekir — önce ihtiyaç ölçülmeli.
+
 ## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
 
 Faz 1.5.3'ün tarayıcı gerektirmeyen kısmı. `@c2/map-core` (store + MapSync), hiçbir şey çizmeyen

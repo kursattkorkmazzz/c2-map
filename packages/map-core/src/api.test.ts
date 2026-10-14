@@ -48,6 +48,13 @@ describe("@c2/map-core genel API", () => {
         // ingest
         "STREAM_FORMAT",
         "createLayerStream",
+        "IngestEngine",
+        "applyIngestPacket",
+        "canMergePatches",
+        "connectIngestWorker",
+        "featureDelta",
+        "mergePatches",
+        "runIngestWorker",
         // actions
         "ACTION_RESULT",
         "FeatureActions",

@@ -8,6 +8,8 @@ export type StatsSnapshot = {
   flushesPerSec: number;
   sentPerSec: number; // haritaya gönderilen unsur sayısı / sn
   mapWorkMsPerSec: number; // ana thread'de harita besleme işine harcanan toplam süre / sn
+  ingestMsPerSec: number; // bunun ingest kısmı (parse + normalize + store / Worker paketi uygulama)
+  flushMsPerSec: number; // bunun flush kısmı (MapSync + adapter)
   maxFlushMs: number;
   longTasks: number; // >50 ms süren ana thread işleri (yalnız Chromium)
 };
@@ -21,6 +23,8 @@ export class Stats {
     flushesPerSec: 0,
     sentPerSec: 0,
     mapWorkMsPerSec: 0,
+    ingestMsPerSec: 0,
+    flushMsPerSec: 0,
     maxFlushMs: 0,
     longTasks: 0,
   };
@@ -34,6 +38,7 @@ export class Stats {
   private flushes = 0;
   private sent = 0;
   private workMs = 0;
+  private flushMs = 0;
   private maxFlush = 0;
   private longTasks = 0;
 
@@ -61,6 +66,7 @@ export class Stats {
     this.sent += sentFeatures;
     if (isFlush) {
       this.flushes++;
+      this.flushMs += ms;
       if (ms > this.maxFlush) this.maxFlush = ms;
     }
   }
@@ -84,11 +90,13 @@ export class Stats {
       flushesPerSec: this.flushes * k,
       sentPerSec: this.sent * k,
       mapWorkMsPerSec: this.workMs * k,
+      ingestMsPerSec: (this.workMs - this.flushMs) * k,
+      flushMsPerSec: this.flushMs * k,
       maxFlushMs: this.maxFlush,
       longTasks: this.longTasks,
     };
     this.windowStart = now;
-    this.frames = this.mapRenders = this.msgs = this.flushes = this.sent = this.workMs = this.maxFlush = this.worstFrame = 0;
+    this.frames = this.mapRenders = this.msgs = this.flushes = this.sent = this.workMs = this.flushMs = this.maxFlush = this.worstFrame = 0;
     this.longTasks = 0;
     return true;
   }

@@ -58,6 +58,7 @@ sonuçlar: [spike/findings.md](../spike/findings.md#çekirdek-ölçümü--node-m
 - [ ] Sembol çakışma (collision) hesabının maliyeti
 - [ ] deck.gl ↔ MapLibre 6 entegrasyonu (dokümandaki yöntem) altında 50k performansı ([karar #16](../decisions.md))
 - [ ] `MOTION_MODE.AUTO` eşiklerinin (ör. 25 / 45 çizim/sn) gerçek ölçümle ayarlanması
+- [ ] deck.gl ikon yeniden hesabı: birliklerin %1'inin sembolü değişince 50k ikonun hepsi yeniden çözülüyor (`getIcon`, profilde ~60 ms/sn; Faz 3.6 ölçümünde görüldü) → yalnız değişenler için çözüm yolu
 
 ## 1.5.5 Hedef donanım
 

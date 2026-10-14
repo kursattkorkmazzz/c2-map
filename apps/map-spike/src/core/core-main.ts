@@ -1,7 +1,7 @@
 // core.html: spike'ın yük üreteci + gerçek @c2/map-core boru hattı.
 //   üreteç → store.transaction → MapSync (kare başına tek flush) → adapter (MapLibre | deck.gl)
 //   adapter hit-test → EventRouter → store (seçim / hover) → MapSync → adapter (feature-state)
-// URL: ?engine=deck|maplibre&format=full|patch&n=10000&hz=1&apply=10&motion=off|on|auto&z=9
+// URL: ?engine=deck|maplibre&format=full|patch&ingest=main|worker&n=10000&hz=1&apply=10&motion=off|on|auto&z=9
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../style.css';
@@ -16,6 +16,7 @@ import {
   MapSync,
   STREAM_FORMAT,
   SymbologyRegistry,
+  connectIngestWorker,
   createLayerStream,
   type Feature,
   type FeaturePatch,
@@ -29,6 +30,8 @@ import { buildSidc, ECHELONS, ENTITIES, IDENTITIES, SymbolCache } from '../symbo
 import { createMaplibreAdapter, markerRenderer, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { BASEMAPS, ORTOFOTO_ID } from './basemaps';
+import type { IngestCommand } from './ingest.worker';
+import { toWire, UnitFeed } from './unit-feed';
 
 const ENGINE = { MAPLIBRE: 'maplibre', DECK: 'deck' } as const;
 type Engine = (typeof ENGINE)[keyof typeof ENGINE];
@@ -49,6 +52,10 @@ const settings = {
   zoom: params.has('z') ? Number(params.get('z')) : 6.5,
   /** Mesaj formatı: en kötü durum (tam nesne) varsayılan — karar #10. */
   format: (params.get('format') === STREAM_FORMAT.PATCH ? STREAM_FORMAT.PATCH : STREAM_FORMAT.FULL) as StreamFormat,
+  /** Ingest nerede: ana thread (JSON parse + normalize + store) veya Worker (yalnız paket uygulama ana thread'de). */
+  ingest: (params.get('ingest') === 'worker' ? 'worker' : 'main') as 'main' | 'worker',
+  /** Mesajlara haritanın kullanmadığı alanlar ekle (gerçek backend JSON'u gibi). */
+  verbose: params.get('payload') === 'verbose',
 };
 
 // ── Çekirdek ─────────────────────────────────────────────────────
@@ -128,64 +135,56 @@ const sync = new MapSync({
 });
 sync.start();
 
-// ── Yük üreteci → akış (createLayerStream) → store ───────────────
-// Üretecin mesajları "backend biçimi" sayılır; normalize onları modele çevirir.
-//   full  : her mesaj birliğin TAMAMI (en kötü durum; props/meta/style her seferinde yeni nesne)
-//   patch : yalnız değişen alanlar (konum + varsa yeni sembol)
+// ── Yük üreteci → ingest → store ─────────────────────────────────
+// Mesajlar gerçek WebSocket gibi JSON METNİ olarak gelir (stringify "backend"in işi, ölçülmez).
+//   main  : JSON parse + normalize + createLayerStream (store'da tam nesne karşılaştırması) ana thread'de
+//   worker: hepsi Worker'da; tam nesne Worker'da patch'e çevrilir; ana thread yalnız paketi uygular
 
-const unitId = (n: number) => `u${n}`;
-let entityOf: number[] = [];
-let echelonOf: number[] = [];
-let identityOf: number[] = [];
+const feed = new UnitFeed(settings.format);
+const feeder = settings.ingest === 'worker' ? startWorkerIngest() : startMainIngest();
 
-const fullFeature = (m: UnitMessage): StreamItem => ({
-  id: unitId(m.id),
-  kind: 'milsym',
-  geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
-  props: { sidc: buildSidc(identityOf[m.id] ?? 0, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) },
-  style: { size: 24 },
-  meta: { hdg: m.hdg },
-});
+function startMainIngest() {
+  const stream = createLayerStream<UnitMessage>(store, { layerId: LAYER_ID, format: settings.format, normalize: feed.normalize });
+  const generator = new UnitGenerator((msgs) => {
+    const wire = toWire(msgs, settings.verbose); // "backend" (ölçüme girmez)
+    const t0 = performance.now();
+    stream.update(JSON.parse(wire) as UnitMessage[]); // bir WS paketi = bir transaction
+    stats.work(performance.now() - t0, 0, false);
+    stats.messages(msgs.length);
+  });
+  generator.perUnitHz = settings.perUnitHz;
+  const reset = () => store.transaction((tx) => tx.replaceLayerContents(LAYER_ID, feed.reset(generator.reset(settings.count))));
+  reset();
+  generator.start();
+  return { reset, pause: () => generator.stop(), resume: () => generator.start() };
+}
 
-const normalize = (m: UnitMessage): StreamItem => {
-  if (m.identity !== undefined) identityOf[m.id] = m.identity;
-  if (settings.format === STREAM_FORMAT.FULL) return fullFeature(m);
-  const patch: FeaturePatch = {
-    id: unitId(m.id),
-    geometry: { kind: GEOMETRY_KIND.POINT, coord: [m.lon, m.lat] },
-    meta: { hdg: m.hdg },
+function startWorkerIngest() {
+  const worker = new Worker(new URL('./ingest.worker.ts', import.meta.url), { type: 'module' });
+  let received = 0;
+  const connection = connectIngestWorker(store, worker, {
+    onPacket: ({ ms }) => {
+      stats.work(ms, 0, false);
+      const total = connection.stats.worker?.received ?? 0;
+      stats.messages(total - received);
+      received = total;
+    },
+    onError: (message) => console.error('[ingest worker]', message),
+    transport: params.get('transport') === 'json' ? 'json' : 'clone',
+  });
+  const command = (c: IngestCommand) => connection.command(c);
+  command({ type: 'init', count: settings.count, hz: settings.perUnitHz, format: settings.format, verbose: settings.verbose });
+  return {
+    reset: () => command({ type: 'reset', count: settings.count }),
+    pause: () => command({ type: 'pause' }),
+    resume: () => command({ type: 'resume' }),
   };
-  if (m.identity !== undefined) patch.props = { sidc: buildSidc(m.identity, entityOf[m.id] ?? 0, echelonOf[m.id] ?? 0) };
-  return patch;
-};
-
-const stream = createLayerStream<UnitMessage>(store, { layerId: LAYER_ID, format: settings.format, normalize });
-
-const generator = new UnitGenerator((msgs) => {
-  const t0 = performance.now();
-  stream.update(msgs); // bir WS paketi = bir transaction
-  stats.work(performance.now() - t0, 0, false);
-  stats.messages(msgs.length);
-});
-generator.perUnitHz = settings.perUnitHz;
-
-function resetUnits(): void {
-  const snapshot = generator.reset(settings.count);
-  entityOf = snapshot.map((m) => m.entity ?? 0);
-  echelonOf = snapshot.map((m) => m.echelon ?? 0);
-  identityOf = snapshot.map((m) => m.identity ?? 0);
-  // Yeniden bağlanma ile aynı yol: katmanı snapshot ile eşitle (snapshot her zaman tam nesne)
-  store.transaction((tx) =>
-    tx.replaceLayerContents(LAYER_ID, snapshot.map((m) => ({ ...(fullFeature(m) as Feature), layerId: LAYER_ID }))),
-  );
 }
 
 store.transaction((tx) => {
   tx.upsertLayers([{ id: LAYER_ID, name: 'Birlikler', parentId: null, visible: true, opacity: 1, renderGroup: true }]);
   tx.upsertBasemaps(BASEMAPS);
 });
-resetUnits();
-generator.start();
 
 // ── Olaylar → store ──────────────────────────────────────────────
 
@@ -236,6 +235,12 @@ panel.innerHTML = `
       ${option(STREAM_FORMAT.PATCH, 'Kısmi patch', settings.format)}
     </select>
   </label>
+  <label>Ingest
+    <select id="ingest">
+      ${option('main', 'Ana thread', settings.ingest)}
+      ${option('worker', 'Worker (patch\'e çevirir)', settings.ingest)}
+    </select>
+  </label>
   <label>Birlik sayısı
     <select id="count">${[1000, 3000, 10000, 20000, 50000].map((n) => option(n, n.toLocaleString('tr-TR'), settings.count)).join('')}</select>
   </label>
@@ -277,6 +282,7 @@ function reloadWith(changes: Record<string, string>): void {
   next.set('apply', String(settings.applyHz));
   next.set('motion', settings.motion);
   next.set('format', settings.format);
+  next.set('ingest', settings.ingest);
   for (const [k, v] of Object.entries(changes)) next.set(k, v);
   location.search = next.toString();
 }
@@ -290,12 +296,13 @@ $<HTMLSelectElement>('motion').onchange = (e) => {
 };
 $<HTMLSelectElement>('count').onchange = (e) => {
   settings.count = Number((e.target as HTMLSelectElement).value);
-  resetUnits();
+  feeder.reset();
 };
 $<HTMLSelectElement>('hz').onchange = (e) => {
   reloadWith({ hz: (e.target as HTMLSelectElement).value }); // kayma süresi mount'ta verilir
 };
 $<HTMLSelectElement>('format').onchange = (e) => reloadWith({ format: (e.target as HTMLSelectElement).value });
+$<HTMLSelectElement>('ingest').onchange = (e) => reloadWith({ ingest: (e.target as HTMLSelectElement).value });
 // Altlıklar store üzerinden: radyo davranışını store'un exclusiveGroup kuralı sağlar.
 $<HTMLSelectElement>('basemap').onchange = (e) =>
   store.transaction((tx) => tx.patchBasemap((e.target as HTMLSelectElement).value, { visible: true }));
@@ -308,8 +315,8 @@ $<HTMLInputElement>('basemap-opacity').oninput = (e) => {
 $<HTMLInputElement>('ortofoto').onchange = (e) =>
   store.transaction((tx) => tx.patchBasemap(ORTOFOTO_ID, { visible: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('paused').onchange = (e) => {
-  if ((e.target as HTMLInputElement).checked) generator.stop();
-  else generator.start();
+  if ((e.target as HTMLInputElement).checked) feeder.pause();
+  else feeder.resume();
 };
 
 function renderStats(): void {
@@ -325,6 +332,8 @@ function renderStats(): void {
     ['MapSync flush / sn', fmt(s.flushesPerSec)],
     ['Haritaya giden unsur / sn', fmt(s.sentPerSec)],
     ['Çekirdek + besleme işi (ms / sn)', fmt(s.mapWorkMsPerSec, 1), grade(s.mapWorkMsPerSec, 70, 150, false)],
+    ['  · ingest (ms / sn)', fmt(s.ingestMsPerSec, 1)],
+    ['  · flush: MapSync + adapter (ms / sn)', fmt(s.flushMsPerSec, 1)],
     ['En uzun flush', `${fmt(s.maxFlushMs, 1)} ms`, grade(s.maxFlushMs, 4, 16, false)],
     ['Long task (>50 ms)', fmt(s.longTasks), grade(s.longTasks, 0, 2, false)],
     ['Akıcı hareket', settings.engine === ENGINE.DECK ? `${adapter.motion.mode} → ${adapter.motion.active ? 'açık' : 'kapalı'}` : '—'],
@@ -346,7 +355,8 @@ function renderSelected(): void {
   const identity = IDENTITIES.find((i) => i.code === sidc[3]);
   el.textContent = [
     `Birlik ${f.id}`,
-    `Birim : ${ENTITIES[entityOf[n] ?? 0]?.name} ${ECHELONS[echelonOf[n] ?? 0]?.name}`,
+    // ingest=worker'da birim bilgisi Worker'da kalır
+    `Birim : ${ENTITIES[feed.entityOf[n] ?? -1]?.name ?? '—'} ${ECHELONS[feed.echelonOf[n] ?? -1]?.name ?? ''}`,
     `Kimlik: ${identity?.name ?? '?'}`,
     `SIDC  : ${sidc}`,
     `Konum : ${f.geometry.coord[1].toFixed(5)}, ${f.geometry.coord[0].toFixed(5)}`,

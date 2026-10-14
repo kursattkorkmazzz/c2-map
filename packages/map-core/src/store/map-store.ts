@@ -289,6 +289,9 @@ class MapStoreImpl implements MapStore {
   private readonly now: () => number;
   private readonly mutableStats = { droppedStale: 0, ignoredPatches: 0, rejectedSnapshotItems: 0 };
 
+  /** En dıştaki transaction'ın başladığı an (tazelik zamanı). */
+  private txTime = 0;
+
   /** Düzenleme taslakları (unsur id → taslak). */
   private readonly drafts = new Map<string, FeatureDraft>();
 
@@ -394,6 +397,8 @@ class MapStoreImpl implements MapStore {
   // ── Transaction ────────────────────────────────────────────────
 
   transaction(fn: (tx: MapTx) => void): void {
+    // Saat bir kez okunur: 50k unsurluk pakette unsur başına `performance.now()` ölçümde ~50 ms/sn tutuyordu.
+    if (this.depth === 0) this.txTime = this.now();
     this.depth++;
     try {
       fn(this.tx);
@@ -663,7 +668,7 @@ class MapStoreImpl implements MapStore {
   }
 
   private touch(id: string, rev: number | undefined): void {
-    this.updatedAt.set(id, this.now());
+    this.updatedAt.set(id, this.txTime); // transaction başındaki zaman (aynı paket = aynı an)
     if (rev !== undefined) this.revs.set(id, rev);
   }
 

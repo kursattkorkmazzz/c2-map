@@ -8,6 +8,8 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-14 | **Ingest Worker isteğe bağlı**; backend mesajı haritanın ihtiyacından kalabalıksa kullanılır. Taşıma varsayılanı `json` | Ölçüm: küçük mesajda Worker ana thread'i hafifletmiyor; kalabalık JSON'da ingest 270 → 134 ms/sn. JSON metin structured clone'dan ucuz | [03](design/03-store.md#ingest-worker-faz-36), [findings](spike/findings.md#ingest-worker-faz-36-2026-10-14) |
+| 2026-10-14 | Store tazelik zamanı transaction başına bir kez okunur (aynı paket = aynı an) | Unsur başına `performance.now()` 50k/sn'de ~50 ms/sn | [findings](spike/findings.md#ingest-worker-faz-36-2026-10-14) |
 | 2026-10-14 | Composite akıcı hareketi renderer'ın `interpolate` kancasıyla; kayma süresi sabit değil, mesajlar arası süreden ölçülür | Her composite türü neyin nasıl enterpole edileceğini bilir (açılar en kısa yoldan); farklı mesaj hızlarında (1 Hz birlik, 5 Hz İHA) ayar gerekmez | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | **Composite** = store'da tek unsur, haritada çok parça; ilk örnek İHA (`kind: 'uav'`: model + sensör konisi + iz + etiket). deck.gl'de ikinci renderer türü: `DeckLayersRenderer` (az sayıda zengin unsur) | Backend yalnız unsuru günceller; parçalar türetilir. İkon yolu (50k) bozulmadan zengin görseller | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |
 | 2026-10-14 | Sensör izi (kamera konisinin zemindeki dörtgeni) çekirdekte saf fonksiyon (`sensorFootprint`) | Motor bağımsız; Cesium aynı köşeleri kullanır | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |

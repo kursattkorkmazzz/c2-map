@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // ingest Worker'ı ES modülü (core.html?ingest=worker)
+  worker: { format: 'es' },
   build: {
     target: 'es2022', // sayfalar top-level await kullanıyor
     rolldownOptions: {

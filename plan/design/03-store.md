@@ -353,8 +353,43 @@ React binding'i: `useSyncExternalStore(cb => store.subscribeFeature(id, cb), () 
 - Backend yalnız değişen alanı gönderebilir (kısmi patch); store alan bazlı birleştirir.
 - **Geri basınç (backpressure):** Mesajlar flush'a kadar store'da birikir; aynı id'nin ara
   durumları günlükte birleşir, bellek O(unsur sayısı) kalır.
-- **Worker (Faz 3):** WS bağlantısı + JSON parse + normalize + birleştirme bir Web Worker'da;
-  ana thread'e kare başına tek paket gelir. Ingest API batch odaklı olduğu için sözleşme değişmez.
+- **Worker (Faz 3.6):** WS bağlantısı + JSON parse + normalize + birleştirme bir Web Worker'da;
+  ana thread'e kare başına tek paket gelir — [aşağıda](#ingest-worker-faz-36).
+
+### Ingest Worker (Faz 3.6)
+
+> Kod: `map-core/src/ingest/worker/`. Ölçüm: [findings](../spike/findings.md#ingest-worker-faz-36-2026-10-14).
+> **İsteğe bağlı**; ne zaman kullanılacağı ölçümle belli (aşağıda).
+
+```ts
+// ingest.worker.ts (uygulamanın; normalize fonksiyonları Worker'da yaşar)
+runIngestWorker({
+  streams: { birlikler: { format: 'full', normalize: (m) => ({ id: m.uid, kind: 'milsym', … }) } },
+  socket: { url, onOpen: (ws, api) => …, onMessage: (data, api) => api.update('birlikler', JSON.parse(data).items) },
+});
+// ana thread
+const ingest = connectIngestWorker(store, new Worker(new URL('./ingest.worker.ts', import.meta.url), { type: 'module' }));
+```
+
+- **`IngestEngine`** (saf): tam nesne akışında her unsurun son hâlini tutar. Pencerede değişen unsur
+  "kirli" işaretlenir ve pencere başındaki hâli (`base`) saklanır; paket çıkarken `base` → son hâl
+  farkı **bir kez** hesaplanır → ara mesajlar kayıpsız birleşir. İçerik aynıysa hiçbir şey
+  gitmez; tazelik (bayatlık) için `touchIntervalMs`'de bir `{ id, rev }` gider.
+- **Fark kuralı** (`featureDelta`): store patch'te `style`/`props`/`meta`'yı sığ birleştirdiği için
+  patch alt anahtar silemez → alt anahtar silindiyse veya kind değiştiyse **tam nesne** gider (nadir).
+  Patch akışında (backend'in patch'leri) kayıpsız birleşemeyen patch'ler sırayla gönderilir.
+  İki rastgele denklik testi (2000'er adım): Worker üzerinden giden store ≡ doğrudan uygulanan store.
+- **Geri basınç:** ana thread kare başına en fazla bir `pull` gönderir, cevap gelmeden yenisini
+  göndermez; yavaşlarsa veriler Worker'da birleşir (bellek O(unsur sayısı)).
+- **Taşıma:** varsayılan `json` (Worker `JSON.stringify`, ana thread `JSON.parse`). Structured
+  clone'un ana thread'de açılması ölçümde belirgin pahalıydı.
+- **Soket:** Worker kendi WebSocket'ini açar; koparsa artan beklemeyle (500 ms → 15 sn) yeniden
+  bağlanır, `onOpen`'da abonelik / snapshot isteği gönderilir. Durum ana thread'e (`onStatus`).
+- **Ne zaman Worker:** backend mesajı haritanın ihtiyacından kalabalıksa (telemetri, metin, iç içe
+  alanlar) — ölçümde ana thread ingest'i yarıya indi. Mesaj zaten küçükse (`{id, lon, lat, hdg}`)
+  paketi ana thread'de açmak, ham mesajı ana thread'de işlemekten ucuz değil → Worker gereksiz.
+- Aynı fazda bulunan, iki modda da geçerli düzeltme: store tazelik zamanını unsur başına değil
+  **transaction başına bir kez** okur (`performance.now()` 50k/sn'de ~50 ms/sn tutuyordu).
 
 ### Akış yardımcısı: `createLayerStream` (kod: `src/ingest/`)
 

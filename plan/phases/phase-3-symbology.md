@@ -35,8 +35,12 @@ Tasarım: [04](../design/04-sync-and-rendering.md#zooma-göre-gösterim-lod)
       geçiş eşiği adayları; sonuç → karar #17 ve [spike/findings.md](../spike/findings.md)
 
 ## 3.6 Ingest Worker
-Tasarım: [03](../design/03-store.md#canlı-veri-girişi-ingest)
-- [ ] WS + JSON parse + normalize + birleştirme Worker'da
-- [ ] Ana thread'e kare başına tek paket
-- [ ] Tam nesne akışında (karar #10) son durumu Worker tutar ve ana thread'e yalnız **patch** gönderir
-      → içerik karşılaştırması ana thread'den çıkar (ölçüm: tam nesne ≈ 2× kısmi patch, [spike](../spike/findings.md#tam-nesne--kısmi-patch-2026-10-13))
+Tasarım: [03](../design/03-store.md#ingest-worker-faz-36) · Ölçüm: [findings](../spike/findings.md#ingest-worker-faz-36-2026-10-14)
+Durum: ✅ (kod: `map-core/src/ingest/worker/`, 17 test; tarayıcıda `core.html?ingest=worker`) — Faz 3'ten öne alındı
+- [x] WS + JSON parse + normalize + birleştirme Worker'da (`runIngestWorker`: soket + artan beklemeyle yeniden bağlanma, `onCommand`)
+- [x] Ana thread'e kare başına tek paket (`connectIngestWorker`: `pull` tabanlı geri basınç, tek transaction)
+- [x] Tam nesne akışında son durumu Worker tutar, ana thread'e yalnız **patch** (pencere başı → son hâl farkı; alt anahtar silindiyse tam nesne; içerik aynıysa yalnız seyrek "canlı" bildirimi). İki rastgele denklik testi
+- [x] Taşıma `json` (varsayılan) / `clone`; ölçümle seçildi
+- [x] Ölçüm (50k × 1 Hz, deck.gl): küçük mesajda Worker ana thread'i hafifletmiyor; kalabalık JSON'da ingest **270 → 134 ms/sn**, FPS 99 → 116 → Worker isteğe bağlı, backend mesajına göre seçilir
+- [x] Yan bulgu (iki modda da): store tazelik zamanı transaction başına bir kez → ana thread ingest'i 186 → 122 ms/sn
+- [ ] (Sonraya) Konum güncellemeleri için ikili (Float64Array, transferable) hızlı yol — taşıma ve store uygulama tabanını düşürmek için; önce ihtiyaç ölçülmeli

@@ -1,7 +1,7 @@
 // Sahte backend: N birlik, her biri saniyede `perUnitHz` kez konum mesajı yollar.
 // Gerçek hayattaki WebSocket akışını taklit eder: mesajlar küçük paketler halinde gelir.
 
-import { ECHELONS, ENTITIES, IDENTITIES } from './symbology';
+import { ECHELONS, ENTITIES, IDENTITIES } from './sidc';
 
 export type UnitMessage = {
   id: number;
