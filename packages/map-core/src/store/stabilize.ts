@@ -122,7 +122,9 @@ export function stabilizeFeature(prev: Feature, next: Feature): Feature {
     prev.kind === next.kind &&
     Object.is(prev.z, next.z) &&
     Object.is(prev.hidden, next.hidden) &&
-    Object.is(prev.selectable, next.selectable);
+    Object.is(prev.selectable, next.selectable) &&
+    Object.is(prev.editable, next.editable) &&
+    Object.is(prev.deletable, next.deletable);
 
   if (
     sameScalars &&

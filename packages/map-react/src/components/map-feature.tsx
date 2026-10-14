@@ -20,6 +20,10 @@ export type MapFeatureProps<S = unknown, P = unknown> = {
   z?: number;
   hidden?: boolean;
   selectable?: boolean;
+  /** `false` → düzenlenemez (varsayılan açık). */
+  editable?: boolean;
+  /** `false` → silinemez (varsayılan açık). */
+  deletable?: boolean;
   /** Görsel olmayan veri: haritaya gitmez, yalnız `useFeature` abonelerine. */
   meta?: Record<string, unknown>;
 };
@@ -48,6 +52,8 @@ export function MapFeature<S = unknown, P = unknown>(props: MapFeatureProps<S, P
     z: props.z,
     hidden: props.hidden,
     selectable: props.selectable,
+    editable: props.editable,
+    deletable: props.deletable,
     meta: props.meta,
   });
   useDeclarative('<MapFeature>', feature, featureOps);

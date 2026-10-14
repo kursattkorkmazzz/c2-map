@@ -49,6 +49,16 @@ Durum: ✅ (çekirdek `draw/` + `geo/shapes.ts`, MapLibre `draw-preview.ts`, Rea
 
 ## 2.5 Düzenleme ve eşzamanlılık
 Tasarım: [09](../design/09-interaction-and-editing.md#düzenleme-ve-eşzamanlılık)
+
+### 2.5.1 İzinler ve yaşam döngüsü ✅
+Tasarım: [09](../design/09-interaction-and-editing.md#izinler-ve-yaşam-döngüsü)
+- [x] `editable` / `deletable` (unsur + katman, zincirle miras). **Varsayılan açık**; yalnız açıkça `false` kapatır. Görsel değil (META biti; haritaya gitmez)
+- [x] `FeatureActions` (çekirdek): ekle / güncelle / sil = bayrak → yaşam döngüsü kancası → store; cevap gelene kadar store'a dokunulmaz, unsur "bekliyor" (ikinci işlem BUSY); `false` iptal, `Feature` dönüşü (backend id / rev) yazılır; hata çağırana
+- [x] React: `<Map lifecycle>`, `<MapLayer|MapFeature editable deletable>`, `useFeatureActions`, `useFeaturePermissions` (reaktif: unsur, katman zinciri, bekleme)
+- [x] `<DrawToolbar layerId>`: çizim `beforeCreate`'ten geçerek eklenir
+- [x] Tarayıcı (`react.html`, sahte backend): birlikte "Sil" yok; çizim backend id'siyle eklenir; silme onayla / retle; bekleme sırasında harita değişmez
+
+### 2.5.2 Düzenleme (taslak)
 - [ ] Taslak (draft) mekanizması — asıl kayıt backend'den güncellenirken taslak etkilenmez
 - [ ] "Başkası değiştirdi" tespiti (`rev` karşılaştırması)
 - [ ] Kaydet: başlangıç `rev`'i ile gönder; onayda taslağı kaldır; iptalde at

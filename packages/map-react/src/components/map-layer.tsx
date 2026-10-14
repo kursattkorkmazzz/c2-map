@@ -15,6 +15,10 @@ export type MapLayerProps = {
   renderGroup?: boolean;
   selectable?: boolean;
   interactive?: boolean;
+  /** `false` → alt ağaçtaki unsurlar düzenlenemez (varsayılan açık). */
+  editable?: boolean;
+  /** `false` → alt ağaçtaki unsurlar silinemez (varsayılan açık). */
+  deletable?: boolean;
   minZoom?: number;
   maxZoom?: number;
   meta?: Record<string, unknown>;
@@ -44,6 +48,8 @@ export function MapLayer({ children, ...props }: MapLayerProps) {
     renderGroup: props.renderGroup,
     selectable: props.selectable,
     interactive: props.interactive,
+    editable: props.editable,
+    deletable: props.deletable,
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
     meta: props.meta,

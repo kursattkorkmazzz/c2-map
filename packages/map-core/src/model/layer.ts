@@ -7,6 +7,8 @@ export type Layer = {
   opacity: number; // 0..1; efektif = atalarla çarpım
   selectable?: boolean;
   interactive?: boolean; // false → hit-test'e hiç girmez (perf)
+  editable?: boolean; // false → alt ağacındaki unsurlar düzenlenemez (varsayılan açık)
+  deletable?: boolean; // false → alt ağacındaki unsurlar silinemez (varsayılan açık)
   minZoom?: number;
   maxZoom?: number;
   renderGroup?: boolean; // true → motor bu alt ağaç için ayrı kaynak açar (plan/design/04-sync-and-rendering.md#maplibre-render-group)

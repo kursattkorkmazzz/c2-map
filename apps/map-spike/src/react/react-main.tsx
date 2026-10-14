@@ -21,6 +21,7 @@ import {
   STREAM_FORMAT,
   type DrawToolKind,
   type Feature,
+  type FeatureLifecycle,
   type StreamItem,
 } from '@c2/map-core';
 import { createMaplibreAdapter, MOTION_MODE, type DeckIcon, type MotionMode } from '@c2/map-maplibre';
@@ -39,6 +40,8 @@ import {
   Polyline,
   useBasemaps,
   useFeature,
+  useFeatureActions,
+  useFeaturePermissions,
   useLayerVisibility,
   useMap,
   useMapEvent,
@@ -121,24 +124,37 @@ function startStream(): () => void {
   return () => generator.stop();
 }
 
-// ── Çizimler ─────────────────────────────────────────────────────
+// ── Sahte backend (yaşam döngüsü kancaları) ──────────────────────
+// Gerçek uygulamada burada HTTP istekleri olur; hata / zaman aşımı uygulamanın.
 
-let drawingCount = 0;
-function saveDrawing(geometry: Feature['geometry'], tool: string): void {
-  const id = `cizim-${++drawingCount}`;
-  store.transaction((tx) =>
-    tx.upsertFeatures([
-      {
-        id,
-        layerId: DRAWINGS,
-        kind: 'vector',
-        geometry,
-        style: { fillColor: '#4dd0e1', fillOpacity: 0.2, strokeColor: '#4dd0e1', strokeWidth: 2, pointColor: '#4dd0e1' },
-        meta: { tool },
-      },
-    ]),
-  );
-}
+const DRAWING_STYLE = { fillColor: '#4dd0e1', fillOpacity: 0.2, strokeColor: '#4dd0e1', strokeWidth: 2, pointColor: '#4dd0e1' };
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let serverSeq = 0;
+
+/** İşlem sonucu panelde görünsün (spike'a özel küçük olay). */
+const report = (text: string) => window.dispatchEvent(new CustomEvent('c2-action', { detail: text }));
+
+const lifecycle: FeatureLifecycle = {
+  // Çizim: backend'e kaydet, kalıcı id + rev dön.
+  async beforeCreate(feature) {
+    report(`${feature.meta?.tool ?? 'unsur'} kaydediliyor…`);
+    await wait(400);
+    const saved = { ...feature, id: `srv-${++serverSeq}`, rev: 1 };
+    report(`${saved.id} kaydedildi`);
+    return saved;
+  },
+  // Silme: backend'de yetki + silme; onay gelince haritadan kalkar.
+  async beforeDelete(feature) {
+    report(`${feature.id} siliniyor…`);
+    await wait(800);
+    if (feature.id === 'hedef-bolge') {
+      report(`${feature.id}: backend reddetti (yetki yok)`);
+      return false;
+    }
+    report(`${feature.id} silindi`);
+    return true;
+  },
+};
 
 // ── Bileşenler ───────────────────────────────────────────────────
 
@@ -175,9 +191,10 @@ function UnitTooltip({ id }: { id: string }) {
 
 function ContextMenu({ featureId, coord, close }: ContextMenuState) {
   const map = useMap();
-  const store = useMapStore();
   const { select } = useSelection();
-  // Yalnız kullanıcı çizimleri silinebilir (canlı birlikler backend'e ait). Silme kuralı uygulamanın.
+  const actions = useFeatureActions();
+  // "Sil" izinden gelir: birlikler katmanı deletable={false}; çizimler ve kontrol tedbirleri açık.
+  const { canDelete, pending } = useFeaturePermissions(featureId ?? '');
   const drawingTool = useFeature(featureId ?? '', (f) => (f?.layerId === DRAWINGS ? String(f.meta?.tool ?? '') : null));
   const run = (action: () => void) => () => {
     action();
@@ -186,14 +203,15 @@ function ContextMenu({ featureId, coord, close }: ContextMenuState) {
   return (
     <>
       <div className="context-title">{featureId ? (drawingTool ? `Çizim: ${DRAW_TOOL_LABELS[drawingTool as DrawToolKind] ?? drawingTool}` : featureId) : 'Harita'}</div>
-      {featureId && drawingTool !== null ? (
-        <button className="danger" onClick={run(() => store.transaction((tx) => tx.removeFeatures([featureId])))}>
-          Sil
-        </button>
-      ) : featureId ? (
+      {featureId ? (
         <>
-          <button onClick={run(() => select(featureId, SELECT_MODE.ADD))}>Seçime ekle</button>
+          {drawingTool === null && <button onClick={run(() => select(featureId, SELECT_MODE.ADD))}>Seçime ekle</button>}
           <button onClick={run(() => coord && map.flyTo({ center: coord, zoom: 10 }))}>Merkeze al</button>
+          {canDelete && (
+            <button className="danger" disabled={pending} onClick={run(() => void actions.delete(featureId))}>
+              {pending ? 'Siliniyor…' : 'Sil'}
+            </button>
+          )}
         </>
       ) : (
         <button onClick={run(() => coord && map.flyTo({ center: coord }))}>Buraya git</button>
@@ -283,6 +301,12 @@ function Panel() {
   const renders = useRenderCount();
   const [fps, setFps] = useState(0);
   const [lastClick, setLastClick] = useState('—');
+  const [lastAction, setLastAction] = useState('—');
+  useEffect(() => {
+    const on = (e: Event) => setLastAction((e as CustomEvent<string>).detail);
+    window.addEventListener('c2-action', on);
+    return () => window.removeEventListener('c2-action', on);
+  }, []);
   useMapEvent(MAP_EVENT.CLICK, (e) => setLastClick(e.featureId ?? 'boş'));
 
   useEffect(() => {
@@ -318,6 +342,7 @@ function Panel() {
           <tr><td>FPS (sayfa)</td><td>{fps}</td></tr>
           <tr><td>Panel render</td><td>{renders}</td></tr>
           <tr><td>Son tıklama</td><td>{lastClick}</td></tr>
+          <tr><td>Son işlem</td><td className="action-log">{lastAction}</td></tr>
           <tr><td>Seçili</td><td><SelectionCount /></td></tr>
           <tr><td>İmleç</td><PointerCoordinate /></tr>
         </tbody>
@@ -329,7 +354,7 @@ function Panel() {
 function App() {
   useEffect(startStream, []);
   return (
-    <Map adapter={adapter} store={store} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
+    <Map adapter={adapter} store={store} lifecycle={lifecycle} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
       {BASEMAPS.map((b) => (
         <MapBasemap key={b.id} {...b} />
       ))}
@@ -348,10 +373,10 @@ function App() {
 
       {/* Kullanıcı çizimleri: araç çubuğundan gelen geometri store'a (uygulamanın kararı) */}
       <MapLayer id={DRAWINGS} name="Çizimler" />
-      <DrawToolbar onComplete={saveDrawing} />
+      <DrawToolbar layerId={DRAWINGS} featureStyle={DRAWING_STYLE} />
 
       {/* Canlı birlikler: içi boş katman; unsurlar akıştan store'a */}
-      <MapLayer id={UNITS} name="Birlikler" renderGroup />
+      <MapLayer id={UNITS} name="Birlikler" renderGroup editable={false} deletable={false} />
 
       <SelectedOverlay />
       <MapTooltip layerId={UNITS} className="unit-tooltip">

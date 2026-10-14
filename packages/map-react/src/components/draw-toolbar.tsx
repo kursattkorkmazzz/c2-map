@@ -11,11 +11,17 @@ import {
   formatDistance,
   type DrawMeasurement,
   type DrawToolKind,
+  type ActionResult,
   type DrawToolOptions,
+  type Feature,
   type Geometry,
 } from '@c2/map-core';
 import type { CSSProperties, ReactNode } from 'react';
+import { useFeatureActions } from '../hooks/use-feature-actions';
 import { useMapDraw } from '../hooks/use-map-draw';
+
+const defaultId = () =>
+  `draw-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 
 export const DRAW_TOOL_LABELS: Record<DrawToolKind, string> = {
   point: 'Nokta',
@@ -32,8 +38,19 @@ const ALL_TOOLS = Object.values(DRAW_TOOL);
 export type DrawToolbarProps = {
   /** Gösterilecek araçlar ve sırası (varsayılan: hepsi). */
   tools?: readonly DrawToolKind[];
-  /** Çizim bitince (iptalde çağrılmaz). */
-  onComplete?: (geometry: Geometry, tool: DrawToolKind) => void;
+  /** Çizim bitince (iptalde çağrılmaz). `layerId` verildiyse ekleme sonucu da gelir. */
+  onComplete?: (geometry: Geometry, tool: DrawToolKind, created?: { feature: Feature; result: ActionResult }) => void;
+  /**
+   * Verilirse çizim bu katmana unsur olarak EKLENİR — `<Map lifecycle.beforeCreate>`'ten geçerek
+   * (ör. önce backend'e kaydet). Verilmezse yalnız `onComplete` çağrılır, ne yapılacağı uygulamanın.
+   */
+  layerId?: string;
+  /** Eklenen unsurun kind'ı (varsayılan `vector`). */
+  featureKind?: string;
+  /** Eklenen unsurun stili (motora özel; MapLibre `vector` için `VectorStyle`). */
+  featureStyle?: unknown;
+  /** Yeni unsur id'si (varsayılan `draw-<uuid>`; backend kendi id'sini `beforeCreate` dönüşünde verebilir). */
+  createId?: (tool: DrawToolKind) => string;
   /** Araç başına seçenek (ör. `{ corridor: { corridorWidthM: 500 } }`). */
   toolOptions?: Partial<Record<DrawToolKind, DrawToolOptions>>;
   /** Düğme etiketleri (varsayılan Türkçe). */
@@ -46,6 +63,10 @@ export type DrawToolbarProps = {
 export function DrawToolbar({
   tools = ALL_TOOLS,
   onComplete,
+  layerId,
+  featureKind = 'vector',
+  featureStyle,
+  createId = defaultId,
   toolOptions,
   labels,
   position = 'top-right',
@@ -53,6 +74,7 @@ export function DrawToolbar({
   style,
 }: DrawToolbarProps) {
   const draw = useMapDraw();
+  const actions = useFeatureActions();
   const activeTool = draw.state?.tool ?? null;
   const right = position.endsWith('right');
   const top = position.startsWith('top');
@@ -60,7 +82,20 @@ export function DrawToolbar({
   const pick = (tool: DrawToolKind) => {
     if (activeTool === tool) return draw.cancel();
     draw.start(tool, toolOptions?.[tool]).then(
-      (geometry) => geometry && onComplete?.(geometry, tool),
+      async (geometry) => {
+        if (!geometry) return;
+        if (layerId === undefined) return onComplete?.(geometry, tool);
+        const feature: Feature = {
+          id: createId(tool),
+          layerId,
+          kind: featureKind,
+          geometry,
+          ...(featureStyle !== undefined ? { style: featureStyle } : {}),
+          meta: { tool },
+        };
+        const result = await actions.create(feature);
+        onComplete?.(geometry, tool, { feature, result });
+      },
       () => {}, // harita hazır değil: düğme etkisiz
     );
   };

@@ -13,7 +13,7 @@ export const FEATURE_CHANGE = {
   HIDDEN: 1 << 4,
   LAYER: 1 << 5, // layerId (başka katmana taşındı)
   INTERACTION: 1 << 6, // selectable
-  META: 1 << 7, // görsel değil → haritaya gitmez
+  META: 1 << 7, // görsel değil → haritaya gitmez (meta, editable, deletable)
 } as const;
 
 export const LAYER_CHANGE = {

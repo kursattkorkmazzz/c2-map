@@ -46,6 +46,8 @@ export type Harness = {
   /** Bekleyen yazmaları uygula + MapSync'i bir kare ilerlet. */
   frame(): Promise<void>;
   rerender(children: ReactNode): void;
+  /** Aynı çocuklarla, <Map> prop'larını değiştirerek yeniden render. */
+  rerenderProps(props: Partial<MapProps>): void;
   unmount(): void;
 };
 
@@ -57,12 +59,16 @@ export async function renderMap(
   const adapter = (props.adapter as StrictMockAdapter | undefined) ?? new StrictMockAdapter();
   const store = props.store ?? createMapStore();
   const scheduler = createManualScheduler();
-  const ui = (content: ReactNode) =>
-    wrap(
-      <Map adapter={adapter} store={store} scheduler={scheduler} initialView={{ center: [32, 39], zoom: 7 }} {...props}>
+  let currentChildren = children;
+  let currentProps = props;
+  const ui = (content: ReactNode) => {
+    currentChildren = content;
+    return wrap(
+      <Map adapter={adapter} store={store} scheduler={scheduler} initialView={{ center: [32, 39], zoom: 7 }} {...currentProps}>
         {content}
       </Map>,
     );
+  };
   const result = render(ui(children));
   await settle();
   return {
@@ -74,6 +80,10 @@ export async function renderMap(
       act(() => scheduler.run());
     },
     rerender: (next) => result.rerender(ui(next)),
+    rerenderProps: (next) => {
+      currentProps = { ...currentProps, ...next };
+      result.rerender(ui(currentChildren));
+    },
     unmount: () => result.unmount(),
   };
 }

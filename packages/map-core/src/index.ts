@@ -11,3 +11,4 @@ export * from "./sync/index";
 export * from "./ingest/index";
 export * from "./geo/index";
 export * from "./draw/index";
+export * from "./actions/index";

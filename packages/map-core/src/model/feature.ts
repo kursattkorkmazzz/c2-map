@@ -18,6 +18,13 @@ export type Feature<K extends string = string, S = unknown, P = unknown> = {
   z?: number; // katman içi sıra
   hidden?: boolean;
   selectable?: boolean;
+  /**
+   * Düzenlenebilir mi? Varsayılan AÇIK (yazılmazsa `true`): yalnız açıkça `false` kapatır.
+   * Kendisi veya katman zincirinden biri `false` ise düzenlenemez. Görsel değil (haritaya gitmez).
+   */
+  editable?: boolean;
+  /** Silinebilir mi? `editable` ile aynı kural (varsayılan açık, `false` kapatır, zincir). */
+  deletable?: boolean;
   meta?: Record<string, unknown>; // domain verisi (yakıt, durum…) → MOTORA GİTMEZ
   rev?: number; // backend sürüm/sequence; sıra dışı güncellemeyi düşürmek için
 };

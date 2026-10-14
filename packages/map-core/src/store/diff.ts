@@ -40,6 +40,8 @@ export function diffFeature(prev: Feature, next: Feature): number {
   if (prev.layerId !== next.layerId) mask |= FEATURE_CHANGE.LAYER;
   if (!Object.is(prev.selectable, next.selectable)) mask |= FEATURE_CHANGE.INTERACTION;
   if (!Object.is(prev.meta, next.meta)) mask |= FEATURE_CHANGE.META;
+  // İzinler görsel değil: META gibi yalnız abonelere gider, haritaya gitmez.
+  if (!Object.is(prev.editable, next.editable) || !Object.is(prev.deletable, next.deletable)) mask |= FEATURE_CHANGE.META;
   // `rev` bilerek karşılaştırılmaz: sürüm numarası görsel veya domain değişikliği değildir.
   return mask;
 }
@@ -62,6 +64,7 @@ export function diffLayer(prev: Layer, next: Layer): number {
   // Kardeşler arası sıra değişimi (aynı parentId) store tarafından ayrıca PARENT olarak işaretlenir.
   if (prev.parentId !== next.parentId) mask |= LAYER_CHANGE.PARENT;
   if (!Object.is(prev.meta, next.meta)) mask |= LAYER_CHANGE.META;
+  if (!Object.is(prev.editable, next.editable) || !Object.is(prev.deletable, next.deletable)) mask |= LAYER_CHANGE.META;
   return mask;
 }
 

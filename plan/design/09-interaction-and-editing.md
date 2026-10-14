@@ -82,6 +82,29 @@ ile çalışır, eskiyor), Geoman MapLibre (free/pro lisans).
 Açık sorular ([karar #8](../decisions.md)): daire çıktısı merkez+yarıçap olarak alınabiliyor mu;
 askeri kontrol tedbiri (ok, faz hattı) için özel mod; snapping.
 
+## İzinler ve yaşam döngüsü
+
+> Faz 2.5.1 (2026-10-14). Kararlar: [decisions](../decisions.md).
+
+Haritadaki her şey düzenlenebilir / silinebilir olmayabilir (backend'in sürdüğü birlikler);
+kullanıcı çizimleri ise her zaman kaldırılabilmeli. İki mekanizma birlikte çalışır:
+
+1. **Bayraklar (veride):** `Feature.editable` / `deletable`, `Layer.editable` / `deletable`.
+   **Varsayılan açık**: yalnız açıkça `false` kapatır (hatayla eklenen çizim kaldırılamaz
+   hâle düşmesin). Unsurun kendisi veya katman zincirinden biri `false` ise kapalı. Veriyi
+   store'a yazan taraf (akış / snapshot) bunu açıkça koyar. Görsel değildir (META biti).
+2. **Yaşam döngüsü kancaları (uygulamanın):** `<Map lifecycle={{ beforeCreate, beforeUpdate,
+   beforeDelete }}>` — async olabilir (ör. backend'de yetki kontrolü + kayıt / silme).
+   `false` → iptal; `true` → devam; `Feature` → backend'in döndürdüğü hâli (id / rev) yazılır.
+
+Sıra: **bayrak → kanca → store.** Bayrak kapalıysa kanca hiç çağrılmaz. Kancanın cevabı gelene
+kadar store'a dokunulmaz; unsur "bekliyor" sayılır (UI "Siliniyor…" gösterebilir), ona ikinci
+işlem başlatılamaz. Hata ve zaman aşımı uygulamanın: kanca hata fırlatırsa store değişmez, hata
+çağırana gider. Akış aynı silmeyi önce getirirse sorun yok (silme idempotent).
+
+Kullanıcı etkileşimleri (sağ tık "Sil", çizim, düzenleme) `FeatureActions` üzerinden geçer;
+akış / snapshot yazımı (`tx.*`) bu kuralları atlar — backend'in kendi kaydı için doğru olan budur.
+
 ## Düzenleme ve eşzamanlılık
 
 Sorun: kullanıcı bir poligonu düzenlerken backend aynı poligon için güncelleme yollayabilir.

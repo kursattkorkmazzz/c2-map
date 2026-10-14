@@ -10,6 +10,8 @@ import {
   createMapStore,
   DrawController,
   EventRouter,
+  FeatureActions,
+  type FeatureLifecycle,
   FeatureKindRegistry,
   MAP_EVENT,
   MapSync,
@@ -57,6 +59,12 @@ export type MapProps = {
   defaultInteractions?: boolean;
   className?: string;
   style?: CSSProperties;
+  /**
+   * Kullanıcı işlemlerinin (çizimle ekleme, düzenleme, silme) "önce" kancaları: ör. backend'de
+   * yetki kontrolü + kayıt. `false` → iptal; cevap gelene kadar store'a dokunulmaz. Hata /
+   * zaman aşımı uygulamanın. Bayraklar (`editable` / `deletable: false`) kancadan önce bakılır.
+   */
+  lifecycle?: FeatureLifecycle;
   onReady?: (map: MapHandle) => void;
   /** Mount hatası (varsayılan: konsola). */
   onError?: (error: unknown) => void;
@@ -84,6 +92,9 @@ export function Map(props: MapProps) {
   const [store] = useState(() => props.store ?? outerStore ?? createMapStore());
   const [router] = useState(() => new EventRouter(store));
   const [writer] = useState(() => new DeclarativeWriter(store));
+  const [actions] = useState(() => new FeatureActions(store));
+  // Güncel kancalar (satır içi fonksiyon verilebilir): her render'dan sonra yenilenir.
+  useEffect(() => actions.setLifecycle(props.lifecycle ?? {}));
   // Çizim araçları çekirdekte; adapter yalnız mod + önizleme sağlar (karar #8).
   const draw = useMemo(() => new DrawController({ events: router, adapter }), [router, adapter]);
   const [ready, setReady] = useState(false);
@@ -190,8 +201,8 @@ export function Map(props: MapProps) {
   }, [draw]);
 
   const context = useMemo<MapContextValue>(
-    () => ({ store, router, adapter, writer, ready, handle, draw }),
-    [store, router, adapter, writer, ready, handle, draw],
+    () => ({ store, router, adapter, writer, ready, handle, draw, actions }),
+    [store, router, adapter, writer, ready, handle, draw, actions],
   );
 
   return (

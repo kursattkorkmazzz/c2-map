@@ -48,6 +48,9 @@ describe("@c2/map-core genel API", () => {
         // ingest
         "STREAM_FORMAT",
         "createLayerStream",
+        // actions
+        "ACTION_RESULT",
+        "FeatureActions",
         // draw
         "DRAW_TOOL",
         "DrawController",
