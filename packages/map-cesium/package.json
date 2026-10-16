@@ -1,0 +1,23 @@
+{
+  "name": "@c2/map-cesium",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CesiumJS adapter'ı (@c2/map-core MapAdapter sözleşmesi) — 3B küre, arazi, glTF modeller. Cesium ion KULLANMAZ.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@c2/map-core": "workspace:*",
+    "cesium": "1.146.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  }
+}

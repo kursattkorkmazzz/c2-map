@@ -1,10 +1,11 @@
 %% 05 — Core kullanım haritası: @c2/map-core'un hangi parçası, hangi dosyada, ne için kullanılıyor
-%% Kaynak: dosyaların `import { … } from '@c2/map-core'` satırları (2026-10-16). Ok etiketi = içe aktarılan adlar.
+%% Kaynak: dosyaların `import { … } from '@c2/map-core'` satırları (2026-10-16, Cesium dahil). Ok etiketi = içe aktarılan adlar.
 %% Testler ve test yardımcıları hariç.
 flowchart LR
   subgraph CORE["@c2/map-core"]
     direction TB
     C_MODEL["model<br/>Feature · Geometry · GEOMETRY_KIND · Layer<br/>Basemap · BASEMAP_SOURCE · LngLat · CameraView · Bounds"]
+    C_UAV["model/uav<br/>UavProps · ALTITUDE_REF<br/>interpolateUav · uavPropsOf"]
     C_STORE["store<br/>createMapStore · MapStore · MapTx<br/>SELECT_MODE · FEATURE_CHANGE · FeaturePatch"]
     C_EVENTS["events<br/>EventRouter · MAP_EVENT · MapEventSink<br/>PointerModifiers · MapEventType/Target · ScreenPoint"]
     C_SYNC["sync<br/>MapSync · createFrameScheduler · Scheduler"]
@@ -42,12 +43,24 @@ flowchart LR
     R_HDE["hooks/use-map-draw · use-map-edit<br/>use-feature-actions"]
   end
 
+  subgraph CS["@c2/map-cesium"]
+    direction TB
+    K_ADP["adapter.ts<br/>CesiumAdapter"]
+    K_BASE["basemaps.ts"]
+    K_BB["renderers/billboard.ts"]
+    K_VEC["renderers/vector.ts · draw-preview.ts"]
+    K_UAV["renderers/uav.ts"]
+    K_GH["ground-height.ts · renderers/types.ts"]
+  end
+
   subgraph SP["apps/map-spike (demo / ölçüm)"]
     direction TB
     S_CORE["core/core-main.ts — core.html"]
     S_WORKER["core/ingest.worker.ts · core/unit-feed.ts"]
     S_REACT["react/react-main.tsx — react.html"]
     S_UAV["react/uav-sim.ts"]
+    S_CES["cesium/cesium-main.tsx — cesium.html"]
+    S_UAV3["cesium/uav-feed.ts (irtifa MSL)"]
   end
 
   %% @c2/map-maplibre
@@ -84,6 +97,22 @@ flowchart LR
   C_EDIT -- "EditState" --> R_HDE
   C_ACTIONS -- "FeatureActions · FeaturePermissions" --> R_HDE
 
+  %% @c2/map-cesium
+  C_ADAPTER -- "MapAdapter uygular · RenderBatch / RenderFeature / RenderGroup<br/>FeatureStatePatch · MountOptions · MapCapabilities" --> K_ADP
+  C_EVENTS -- "MAP_EVENT · MapEventSink (scene.pick → emit)" --> K_ADP
+  C_REG -- "FeatureKindRegistry (fallback)" --> K_ADP & K_GH
+  C_DRAW -- "DrawPreview (setDrawPreview)" --> K_ADP & K_VEC
+  C_REG -- "BasemapProviderRegistry (auth, custom kaynak)" --> K_BASE
+  C_MODEL -- "Basemap · BASEMAP_SOURCE" --> K_BASE
+  C_STORE -- "FEATURE_CHANGE (konum / görüntü bitleri)" --> K_BB
+  C_ADAPTER -- "RENDER_CHANGE (opaklık) · FeatureVisualState" --> K_BB & K_VEC & K_GH
+  C_GEO -- "shapeRings (daire · elips · koridor · dikdörtgen)" --> K_VEC
+  C_GEO -- "sensorFootprint (yerden yükseklikle)" --> K_UAV
+  C_UAV -- "UavProps · ALTITUDE_REF · interpolateUav (kayma)" --> K_UAV
+
+  %% @c2/map-maplibre (İHA)
+  C_UAV -- "UavProps · interpolateUav (yeniden dışa açar)" --> F_UAV
+
   %% apps/map-spike
   C_STORE -- "createMapStore" --> S_CORE & S_REACT
   C_SYNC -- "MapSync · createFrameScheduler (ölçüm sarmalayıcı)" --> S_CORE
@@ -94,3 +123,8 @@ flowchart LR
   C_GEO -- "parseCoordinate · toMgrs · formatCoordinate · distance" --> S_REACT
   C_GEO -- "destination (yörünge)" --> S_UAV
   C_ACTIONS -- "FeatureLifecycle (sahte backend)" --> S_REACT
+  C_STORE -- "createMapStore · SELECT_MODE" --> S_CES
+  C_INGEST -- "createLayerStream (birlikler, İHA'lar)" --> S_CES & S_UAV3
+  C_GEO -- "toMgrs · formatCoordinate (imleç)" --> S_CES
+  C_GEO -- "destination (yörünge)" --> S_UAV3
+  C_UAV -- "UavProps · ALTITUDE_REF.SEA" --> S_UAV3 & S_CES

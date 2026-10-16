@@ -8,6 +8,7 @@ flowchart TB
     M_LAYER["Layer<br/>parentId · visible · opacity · renderGroup<br/>minZoom/maxZoom · selectable · editable · deletable"]
     M_BASE["Basemap · BASEMAP_SOURCE<br/>xyz · wmts · wms · tilejson · image · vector-style"]
     M_CAM["CameraView · Bounds · LngLat"]
+    M_UAV["uav — composite İHA<br/>UavProps · ALTITUDE_REF (ground / sea)<br/>interpolateUav (z dahil) · uavPropsOf"]
   end
 
   subgraph STORE["store/ — tek doğruluk kaynağı"]
@@ -79,6 +80,7 @@ flowchart TB
   %% model
   M_FEAT --> M_GEOM
   M_GEOM --> M_CAM
+  M_UAV --> M_FEAT & G_SENSOR
 
   %% store
   S_STORE --> S_TX & S_JOURNAL & S_DIFF & S_STAB

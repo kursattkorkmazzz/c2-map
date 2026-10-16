@@ -11,6 +11,9 @@ describe("@c2/map-core genel API", () => {
         // model
         "BASEMAP_SOURCE",
         "GEOMETRY_KIND",
+        "ALTITUDE_REF",
+        "interpolateUav",
+        "uavPropsOf",
         // store
         "BASEMAP_CHANGE",
         "BASEMAP_CHANGE_ALL",

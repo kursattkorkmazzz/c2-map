@@ -66,7 +66,8 @@ Seçim / hover / sağ tık / izinler unsurun kendisine aittir (parçalara değil
   geometry: { kind: 'point', coord: [lon, lat] },
   props: {
     headingDeg: 329,          // burun yönü (kuzeyden saat yönü)
-    altitudeM: 2800,          // yerden yükseklik
+    altitudeM: 2800,          // irtifa (m)
+    altitudeRef: 'ground',    // 'ground' yerden (varsayılan) | 'sea' deniz seviyesinden — Cesium'da arazi
     callsign: 'TB2-3',
     sensor: { panDeg: 45, tiltDeg: 53, hfovDeg: 18, vfovDeg: 12, maxRangeM: 25000 },
   } }
@@ -98,9 +99,33 @@ Seçim / hover / sağ tık / izinler unsurun kendisine aittir (parçalara değil
   planlanan / sabit gözlem İHA'sı). Canlı olanlar akıştan (`createLayerStream`).
 - **Yarı saydam yüzeyler** derinliğe yazmaz (`depthWriteEnabled: false`): koni yüzleri birbirini
   ve modeli kesip delik bırakmasın.
-- **3B görünüm** MapLibre eğimiyle (2,5B): arazi yok, irtifa düz zemine göre. Gerçek arazi / küre
-  Faz 5 (Cesium).
+- **3B görünüm** MapLibre eğimiyle (2,5B): arazi yok, irtifa düz zemine göre. Gerçek arazi / küre:
+  Cesium (`cesiumUavRenderer`, aşağıda [Cesium arazi](#cesium-arazi)) — aynı unsur, aynı props.
+- **Tip ve ara hâl çekirdekte** (2026-10-16): `UavProps`, `ALTITUDE_REF`, `interpolateUav` (z dahil)
+  `@c2/map-core`'da; iki adapter da kullanır (`@c2/map-maplibre` geriye uyum için yeniden dışa açar).
 - Model: "Predator Drone" — sftwr314r8, Poly Pizza, CC BY 3.0 (`apps/map-spike/public/models/ATTRIBUTION.md`).
+
+## Cesium arazi
+
+> 2026-10-16 — Cesium **ion kullanılmaz** (hesap / anahtar / ücret yok). Kod: `packages/map-cesium/src/terrain.ts`,
+> `basemaps.ts`.
+
+- **Görüntü:** Cesium'un varsayılan küre görüntüsü (Bing, ion) kapalı (`baseLayer: false`); görüntü
+  store'daki altlıklardan gelir. Demo: Esri World Imagery (uydu, XYZ) + Esri sınırlar / yer adları
+  bindirmesi; OSM ve OpenTopoMap da seçilebilir. Hepsi anahtarsız.
+- **Arazi:** Mapzen / AWS "Terrain Tiles" (AWS Open Data, anahtarsız, CORS açık). Terrarium PNG:
+  `h = (R·256 + G + B/256) − 32768` (m). Web Mercator `{z}/{x}/{y}`, seviye 15'e kadar.
+  `CustomHeightmapTerrainProvider` + `WebMercatorTilingScheme`: karo başına bir PNG, 65×65 ızgaraya
+  bilineer örnekleme. 15'in ötesinde ata karo tekrar indirilmez, önbellekten alt bölge örneklenir.
+  İndirme hatasında düz zemin döner (`undefined` Cesium'da "sonra tekrar dene" = sonsuz deneme).
+- **Kendi sunucu:** `terrariumTerrain({ url })` ile aynı formatta yerel / kurum içi karo sunucusu
+  verilebilir (kapalı ağ). `terrain: false` → düz elipsoit.
+- Yükseklikler deniz seviyesine (EGM96), Cesium elipsoide göre: Türkiye'de fark ≈ 30–37 m. Görsel
+  olarak önemsiz; hassas iş için `offsetM`.
+- **İHA irtifası:** `UavProps.altitudeRef` — `ground` (yerden, varsayılan) veya `sea` (deniz
+  seviyesinden; gerçek telemetri genelde budur). Cesium mutlak yüksekliği buna göre kurar, sensör
+  izini **yerden yükseklikle** (mutlak − o noktadaki zemin) hesaplar; iz köşeleri arazi
+  yüksekliğine oturur. Arazisiz MapLibre ikisini de yerden yükseklik olarak çizer.
 
 ## Koordinat sistemleri
 

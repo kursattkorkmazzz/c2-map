@@ -1,5 +1,6 @@
-%% 01 — Genel mimari: üç paket ve veri akışı
-%% Ayrıntı: 02 (core), 03 (MapLibre), 04 (React); akışlar: 06, 07, 08
+%% 01 — Genel mimari: paketler ve veri akışı
+%% Ayrıntı: 02 (core), 03 (MapLibre), 04 (React), 09 (Cesium); akışlar: 06, 07, 08
+%% Uygulama motoru adapter seçerek değiştirir: aynı store, aynı React kodu (MapLibre 2B/2,5B veya Cesium 3B).
 flowchart LR
   subgraph BE["Backend"]
     WS[("WebSocket / REST<br/>birlikler, İHA'lar, kontrol tedbirleri")]
@@ -11,7 +12,7 @@ flowchart LR
   end
 
   subgraph REACT["@c2/map-react — React binding"]
-    RMAP["&lt;Map&gt;<br/>store · router · MapSync kurar"]
+    RMAP["&lt;Map adapter&gt;<br/>store · router · MapSync kurar"]
     RCOMP["Bildirimsel bileşenler<br/>MapLayer, MapFeature, CompositeFeature,<br/>MapBasemap, MapOverlay, MapTooltip,<br/>MapContextMenu, DrawToolbar"]
     RHOOK["Hook'lar<br/>useFeature, useSelection, useMapEvent,<br/>useMapDraw, useMapEdit, useFeatureActions"]
   end
@@ -24,12 +25,18 @@ flowchart LR
     CTRL["DrawController · EditController<br/>FeatureActions"]
     GEO["geo<br/>UTM · MGRS · DMS · jeodezik<br/>şekiller · sensör izi"]
     REG["Registry'ler<br/>kind · semboloji · altlık sağlayıcı"]
+    UAVM["model/uav<br/>UavProps · altitudeRef<br/>interpolateUav"]
   end
 
-  subgraph ML["@c2/map-maplibre — motor adapter'ı"]
+  subgraph ML["@c2/map-maplibre — 2B / 2,5B adapter"]
     ADP["MaplibreAdapter<br/>(MapAdapter sözleşmesi)"]
     MAPLIBRE["MapLibre GL 6<br/>altlıklar · vektör · marker"]
     DECK["deck.gl (interleaved)<br/>birlikler 50k · İHA 3B · halkalar"]
+  end
+
+  subgraph CS["@c2/map-cesium — 3B adapter (ion'suz)"]
+    CADP["CesiumAdapter<br/>(aynı MapAdapter sözleşmesi)"]
+    CESIUM["CesiumJS küre<br/>Terrarium arazisi · uydu altlığı<br/>billboard · entity · glTF"]
   end
 
   WS -- "JSON mesajları" --> ING
@@ -40,12 +47,16 @@ flowchart LR
   RMAP --> SYNC & ROUTER & CTRL
   STORE -- "değişiklik günlüğü<br/>(drainChanges)" --> SYNC
   SYNC -- "RenderBatch<br/>(applyBatch)" --> ADP
+  SYNC -- "RenderBatch<br/>(applyBatch)" --> CADP
   ADP --> MAPLIBRE & DECK
+  CADP --> CESIUM
   ADP -- "hit-test sonucu olay<br/>(emit)" --> ROUTER
+  CADP -- "hit-test sonucu olay<br/>(emit)" --> ROUTER
   ROUTER -- "dinleyiciler" --> RHOOK & CTRL
-  CTRL -- "setDrawMode / setDrawPreview" --> ADP
+  CTRL -- "setDrawMode / setDrawPreview" --> ADP & CADP
   CTRL -- "taslak / izinli yazma" --> STORE
   LC -. "async onay" .-> CTRL
-  REG -. "mount'ta verilir" .-> ADP
-  GEO -. "şekil → poligon, sensör izi" .-> ADP
+  REG -. "mount'ta verilir" .-> ADP & CADP
+  GEO -. "şekil → poligon, sensör izi" .-> ADP & CADP
+  UAVM -. "İHA props + ara hâl" .-> DECK & CESIUM
   GEO -. "ölçüm, koordinat" .-> CTRL & UI

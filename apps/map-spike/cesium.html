@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map Spike — @c2/map-cesium (3B)</title>
+    <!-- Cesium Worker / Asset dosyalarının adresi (vite.config.ts: cesiumStatic) — modüllerden ÖNCE -->
+    <script>
+      window.CESIUM_BASE_URL = '/cesium/';
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/cesium/cesium-main.tsx"></script>
+  </body>
+</html>

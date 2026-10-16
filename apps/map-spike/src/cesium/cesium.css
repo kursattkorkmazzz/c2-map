@@ -1,0 +1,23 @@
+#panel fieldset {
+  margin: 8px 0;
+  padding: 4px 8px 8px;
+  border: 1px solid #3a4452;
+  border-radius: 6px;
+}
+
+#panel fieldset legend {
+  padding: 0 4px;
+  color: #9ad0ff;
+  font-size: 12px;
+}
+
+#panel fieldset input[type='number'] {
+  width: 90px;
+}
+
+/* Cesium'un kendi kaynak gösterimi sol altta; panelin altında kalmasın */
+.cesium-widget-credits {
+  right: 8px;
+  left: auto !important;
+  text-align: right;
+}

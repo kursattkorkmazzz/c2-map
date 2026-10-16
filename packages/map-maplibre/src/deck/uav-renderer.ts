@@ -13,20 +13,11 @@
 // Sensör izinin hesabı çekirdekte (`sensorFootprint`, motor bilmez); burada yalnız çizim.
 // Backend yalnız unsuru günceller; her güncellemede parçalar yeniden üretilir (onlarca İHA için ucuz).
 
-import { sensorFootprint, type Feature, type LngLat, type RenderFeature, type SensorParams } from '@c2/map-core';
+import { sensorFootprint, type Feature, type LngLat, type RenderFeature, type UavProps, interpolateUav, uavPropsOf } from '@c2/map-core';
 import type { DeckLayersContext, DeckLayersRenderer } from './deck-controller';
 
-/** `kind: 'uav'` unsurunun props'u. */
-export type UavProps = {
-  /** Burun yönü: derece, kuzeyden saat yönünde. */
-  headingDeg: number;
-  /** Yerden yükseklik (m). */
-  altitudeM: number;
-  /** Kamera / gimbal. Yoksa koni çizilmez. */
-  sensor?: SensorParams;
-  /** Etiket (ör. çağrı adı). */
-  callsign?: string;
-};
+/** `kind: 'uav'` unsurunun props'u — tip çekirdekte (Cesium da kullanır). */
+export type { UavProps };
 
 type Rgba = [number, number, number, number];
 
@@ -218,47 +209,8 @@ export function uavRenderer(options: UavRendererOptions): DeckLayersRenderer {
   };
 }
 
-/**
- * İki İHA mesajı arası ara hâl: konum, irtifa, burun yönü (en kısa açıdan: 350° → 10° 0°'dan geçer),
- * kamera pan / eğim / görüş açısı. Diğer alanlar hedef mesajdan.
- */
-export function interpolateUav(from: Feature, to: Feature, t: number): Feature {
-  const a = uavPropsOf(from);
-  const b = uavPropsOf(to);
-  const pa = pointOf(from);
-  const pb = pointOf(to);
-  if (!a || !b || !pa || !pb) return to;
-  const lerp = (x: number, y: number) => x + (y - x) * t;
-  const sensor =
-    a.sensor && b.sensor
-      ? {
-          ...b.sensor,
-          panDeg: lerpAngle(a.sensor.panDeg, b.sensor.panDeg, t),
-          tiltDeg: lerp(a.sensor.tiltDeg, b.sensor.tiltDeg),
-          hfovDeg: lerp(a.sensor.hfovDeg, b.sensor.hfovDeg),
-          vfovDeg: lerp(a.sensor.vfovDeg, b.sensor.vfovDeg),
-        }
-      : b.sensor;
-  const props: UavProps = {
-    ...b,
-    headingDeg: (lerpAngle(a.headingDeg, b.headingDeg, t) + 360) % 360,
-    altitudeM: lerp(a.altitudeM, b.altitudeM),
-    ...(sensor ? { sensor } : {}),
-  };
-  return { ...to, geometry: { kind: 'point', coord: [lerp(pa[0], pb[0]), lerp(pa[1], pb[1])] }, props };
-}
-
-/** Açılar arası en kısa yol (derece). */
-function lerpAngle(a: number, b: number, t: number): number {
-  const d = ((((b - a) % 360) + 540) % 360) - 180;
-  return a + d * t;
-}
-
-function uavPropsOf(feature: Feature): UavProps | null {
-  const p = feature.props as Partial<UavProps> | undefined;
-  if (!p || typeof p.headingDeg !== 'number' || typeof p.altitudeM !== 'number') return null;
-  return p as UavProps;
-}
+/** İki mesaj arası ara hâl — çekirdekte (Cesium da kullanır). */
+export { interpolateUav };
 
 function pointOf(feature: Feature): LngLat | null {
   return feature.geometry.kind === 'point' ? feature.geometry.coord : null;

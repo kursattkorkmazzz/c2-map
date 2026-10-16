@@ -184,6 +184,69 @@ Paint: `['case', ['boolean', ['feature-state', 'selected'], false], seçiliRenk,
   hedef ekrandaki konumdan başlar. Yeni eklenen birlik kaymaz, yerinde belirir.
 - Kare döngüsü yalnız hareket eden birlik varken döner; hareket bitince durur.
 
+## Cesium yolu
+
+> 2026-10-16 — Faz 5'in ilk sürümü. Kod: `packages/map-cesium/`; demo `apps/map-spike/cesium.html`.
+> Çekirdek (store, MapSync, EventRouter, çizim / düzenleme denetleyicileri) ve `@c2/map-react`
+> **değişmeden** çalışır: aynı `<Map>`, `<MapLayer>`, `<Polygon>`, `<DrawToolbar>`, hook'lar.
+
+MapLibre'de renderer veri **kodlar** (katman + GeoJSON özelliği), motor çizer. Cesium imperatif bir
+sahne grafiğidir: renderer unsur başına motor nesnesi **kurar** ve günceller. Çekirdeğin
+`AdapterRenderer` notunda öngörülen şekil budur:
+
+```ts
+interface CesiumKindRenderer<THandle> {
+  init?(ctx); destroy?(ctx);                                  // mount / unmount'ta bir kez
+  create(rf, ctx, state): THandle | null;                     // null → çizilemez (sayılır)
+  update(handle, rf, ctx, state): THandle | null | void;      // rf.changed hangi bit değişti
+  remove(handle, ctx);
+  setState?(handle, state, ctx);                              // seçim / hover
+}
+```
+
+| Kind | Renderer | Cesium nesnesi |
+|---|---|---|
+| `milsym` (birlikler) | `billboardRenderer({ image })` | Tek `BillboardCollection`; görüntü **anahtarla** paylaşılır (`setImage(sidc, canvas)`), araziye oturur (`CLAMP_TO_GROUND`), tepe arkasında kaybolmaz (`disableDepthTestDistance`). Seçim: aynı konumda halka billboard'u |
+| `vector` (kontrol tedbirleri, çizimler) | `vectorRenderer` | Entity: araziye giydirilmiş poligon (GroundPrimitive) + ayrı zemin çizgisi (giydirilmiş poligon çerçeve çizemez), `zIndex` = MapSync sırası. Şekiller çekirdeğin `shapeRings`'iyle |
+| `uav` (composite) | `cesiumUavRenderer({ modelUrl })` | Entity model (glTF) + etiket + çizgiler; koni yüzleri ve iz **tek ortak primitive** (aşağıda) |
+
+- **`applyBatch`:** altlıklar → `ImageryLayer`; unsurlar → renderer; entity olayları batch boyunca
+  askıda (`suspendEvents` / `resumeEvents`: görselleştiriciler tek seferde çalışır); durum →
+  `setState`. 3B'de render group ayrı kaynak açmaz (sıra yalnız zemin geometrilerinde `zIndex`).
+- **Hit-test:** `scene.pick` → en üstteki motor nesnesi → `own(nesne, featureId)` ile kaydedilmiş
+  sahibi. Renderer seçilebilir her nesneyi kaydeder (İHA'da tüm parçalar). Billboard'un `id`'si
+  doğrudan unsur id'si.
+- **Olaylar:** tuval DOM olayları (değiştirici tuşlar için). Cesium sürükleyerek döndürür /
+  yakınlaştırır: basıp 5 px'ten fazla sürüklenen tuş tıklama sayılmaz. Hover kare başına bir
+  `scene.pick` (sürüklerken hiç). `VIEW_CHANGE` = `camera.moveEnd`.
+- **Kamera:** çekirdeğin `CameraView`'ı MapLibre'ninkidir; Cesium'da kamera bir noktaya mesafe
+  ve açılarla bakar. zoom → mesafe: zoom'daki metre/piksel (512 px karo) × ekran yüksekliği, dikey
+  görüş açısına sığdırılır; bearing = heading; pitch = Cesium pitch + 90°. Aynı `initialView` iki
+  motorda yaklaşık aynı alanı gösterir. `center[2]` verilirse oraya (ör. İHA irtifasına), yoksa
+  zemine bakılır.
+- **Entity id'si benzersiz** (`unsur#parça@sayaç`): aynı id ile silinip aynı batch'te (olaylar
+  askıdayken) yeniden eklenen entity'yi Cesium "değişmedi" sayar ve ekranda **eskisi kalır**
+  (düzenlemede bulundu: kaydedilen şekil haritaya yansımıyordu).
+- **Çizim önizlemesi:** entity'ler bir kez kurulur, değer yalnız değişince yazılır.
+  `CallbackProperty` kullanılmaz: araziye giydirilmiş dinamik şekil her karede baştan üçgenlenir
+  (ölçüldü: çizerken 26 → 6 FPS). Sabit değerde Cesium yeniden üretimi Worker'da yapar ve yenisi
+  hazır olana kadar eskisini gösterir.
+- **İHA yüzeyleri:** her İHA'nın 4 koni yüzü + izi entity poligonu olarak her karede yeniden
+  üretiliyordu (İHA başına 5 primitive, alt bölme, normaller): 6 İHA'da 58 → 28 FPS. Şimdi tüm
+  İHA'ların yüzeyleri her karede **tek** `Primitive`'de ham üçgen (İHA başına 6), eşzamanlı.
+  Model, etiket ve çizgiler entity (`CallbackProperty`) — ucuz.
+- **Kare önbelleği:** İHA parçalarının ~12 özelliği aynı karede tek hesaptan okunur (anahtar:
+  sahnenin kare sayacı; `performance.now()` her çağrıda farklı olduğu için önbellek tutmuyordu).
+- **Zemin yüksekliği** (`GroundHeightCache`): `Globe.getHeight` karonun üçgenlerinde ışın testi
+  yapar; her karede onlarca çağrı 6 İHA'da 3 sn'nin 2,8 sn'sini yiyordu. ~110 m hücre başına,
+  2 sn ömürlü önbellek (arazi kademeli inceldiği için kısa ömür; arazi yoksa önbelleğe alınmaz).
+- **Görüntü kalitesi** (`quality` / `setQuality`): entegre GPU'da MSAA, atmosfer ve sis pahalı.
+  `high` = Cesium varsayılanı; `balanced` (varsayılan) = MSAA yok + FXAA, zemin atmosferi ve sis
+  yok; `fast` = gökyüzü / yıldız / güneş de yok. Ölçüm: [findings](../spike/findings.md#cesium-adapterı-faz-5-2026-10-16).
+- **Statik dosyalar:** Cesium Worker / Asset dosyalarını `CESIUM_BASE_URL` altından ister. Spike'ta
+  küçük bir Vite eklentisi geliştirmede `node_modules/cesium/Build/Cesium`'u `/cesium/` altından
+  sunar, derlemede `dist/cesium`'a kopyalar (`apps/map-spike/vite.config.ts`).
+
 ## Askeri semboller ve ikonlar
 
 - Görüntü **benzersiz anahtar başına bir kez** üretilir:

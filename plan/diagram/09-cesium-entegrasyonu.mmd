@@ -1,0 +1,52 @@
+%% 09 — @c2/map-cesium: CesiumAdapter'ın içi (3B küre, arazi, Cesium ion YOK)
+%% Aynı MapAdapter sözleşmesi: çekirdek ve React binding değişmeden çalışır (03'teki MapLibre'nin karşılığı).
+%% Kod: packages/map-cesium/src/
+flowchart TB
+  SYNC["MapSync (core)"] -- "applyBatch(RenderBatch)" --> APPLY
+
+  subgraph ADAPTER["CesiumAdapter — adapter.ts"]
+    MOUNT["mount<br/>CesiumWidget({ baseLayer: false })  ← ion görüntüsü kapalı<br/>arazi · CustomDataSource 'c2-features' · çizim önizlemesi<br/>renderer.init(ctx) · setQuality · olaylar"]
+    APPLY["applyBatch sırası<br/>0 altlıklar → 1 gruplar (yalnız kayıt)<br/>2 unsurlar: entity olayları ASKIDA (suspend / resume)<br/>3 kaldırılan gruplar → 4 görsel durum (setState)"]
+    RESOLVE{"resolveRenderer(kind)<br/>renderers, yoksa<br/>FeatureKindRegistry.resolveFor"}
+    CTX["CesiumRenderContext<br/>scene · entities · primitives<br/>own / disown (hit-test sahipliği)<br/>groundHeight (önbellekli) · frameNumber"]
+    CAM["Kamera — camera.ts<br/>zoom ↔ mesafe (512 px karo, dikey FOV)<br/>bearing = heading · pitch = Cesium pitch + 90°<br/>center[2] → o yüksekliğe bak"]
+    EVENTS["wireEvents (tuval DOM olayları)<br/>click · dblclick · contextmenu (5 px sürükleme = tıklama değil)<br/>pointermove (rAF, sürüklerken hit-test yok) · camera.moveEnd"]
+    HIT{"hitTest(point)<br/>scene.pick → nesnenin sahibi (owners)<br/>yoksa billboard id'si"}
+    QUAL["setQuality<br/>high: MSAA 4×, atmosfer, sis<br/>balanced (varsayılan): FXAA, zemin atmosferi / sis yok<br/>fast: + gökyüzü yok"]
+    DRAW["setDrawMode: artı imleç<br/>setDrawPreview → CesiumDrawPreview"]
+  end
+
+  subgraph TERRAIN["Arazi ve görüntü — ücretsiz, anahtarsız"]
+    TER["terrain.ts — terrariumTerrain()<br/>AWS Terrain Tiles (Terrarium PNG)<br/>CustomHeightmapTerrainProvider + WebMercator<br/>65×65 örnek · 15'in ötesinde ata karo · hata → düz"]
+    BASE["basemaps.ts — CesiumBasemapController<br/>XYZ / WMTS / WMS / TileJSON / IMAGE → ImageryLayer<br/>opaklık, görünürlük yerinde · order → raiseToTop"]
+    GH["ground-height.ts — GroundHeightCache<br/>Globe.getHeight pahalı → ~110 m hücre, 2 sn ömür"]
+  end
+
+  subgraph RENDERERS["Renderer'lar — create / update / remove / setState"]
+    BB["billboardRenderer (birlikler)<br/>tek BillboardCollection · setImage(sidc, canvas)<br/>CLAMP_TO_GROUND · disableDepthTestDistance<br/>seçim: halka billboard'u"]
+    VEC["vectorRenderer (kontrol tedbirleri, çizimler)<br/>Entity poligon (araziye giydirilmiş) + zemin çizgisi<br/>zIndex · shapeRings · id: unsur#parça@sayaç"]
+    UAV["cesiumUavRenderer (composite İHA)<br/>Entity: glTF model + etiket + çizgiler (CallbackProperty)<br/>kare başına tek hesap · akıcı kayma (interpolateUav)<br/>altitudeRef: sea → mutlak, ground → zemin + irtifa"]
+    SURF["İHA yüzeyleri<br/>tüm koni yüzleri + izler TEK Primitive<br/>her karede (scene.preUpdate), ham üçgen"]
+  end
+
+  PREV["draw-preview.ts — CesiumDrawPreview<br/>entity'ler bir kez kurulur, değer yalnız değişince<br/>(CallbackProperty yok: dinamik zemin şekli pahalı)"]
+  ROUTER["EventRouter (core)"]
+  CTRLS["DrawController / EditController (core)"]
+  CORE["@c2/map-core<br/>sensorFootprint · shapeRings · UavProps"]
+
+  MOUNT --> TER & BASE & CTX & QUAL
+  APPLY --> BASE
+  APPLY --> RESOLVE
+  RESOLVE -- "milsym" --> BB
+  RESOLVE -- "vector" --> VEC
+  RESOLVE -- "uav" --> UAV
+  UAV --> SURF
+  BB & VEC & UAV -- "own(nesne, unsur id)" --> CTX
+  UAV & SURF -- "groundHeight" --> GH
+  CTX --> GH
+  CAM -. "groundHeight (bakılacak zemin)" .-> GH
+  EVENTS --> HIT
+  HIT -- "MapEventSink.emit" --> ROUTER
+  CTRLS -- "setDrawMode / setDrawPreview" --> DRAW --> PREV
+  UAV -. "sensör izi (yerden yükseklikle)" .-> CORE
+  VEC -. "daire / elips / koridor → halka" .-> CORE

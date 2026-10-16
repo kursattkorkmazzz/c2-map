@@ -254,6 +254,63 @@ Edge, gerçek GPU; 8 örneğin medyanı (ms / sn).
 5. Tabanı store uygulaması belirliyor (Worker'da bile ~100+ ms/sn): daha fazlası için konum
    güncellemelerinde ikili (transferable) hızlı yol gerekir — önce ihtiyaç ölçülmeli.
 
+## Cesium adapter'ı (Faz 5, 2026-10-16)
+
+`cesium.html?n=…&uav=…&q=high|balanced|fast`. Headless Edge, **Intel UHD (entegre GPU)**, D3D11,
+1400×900, uydu altlığı + yer adları bindirmesi + Terrarium arazisi. FPS = sayfanın kare hızı
+(rAF), arazi / görüntü karoları yüklendikten sonra 3 örnek. Aynı makinede 2B sayfa
+(`react.html`, MapLibre + deck.gl, 2000 birlik) 120 FPS.
+
+**1) Ana thread: İHA'lar arazi yüksekliğini her karede soruyordu.**
+
+| 2000 birlik + 6 İHA | FPS | uzun görev / 3 sn |
+|---|---|---|
+| ilk hâl | 7 | 2,7 sn |
+| + kare önbelleği (kare sayacı) + zemin yüksekliği önbelleği | 14 | 0 |
+
+CPU profili: `Globe.getHeight` (karonun üçgenlerinde ışın testi) 3,5 sn'nin 2,8 sn'si. İHA
+parçalarının ~12 özelliği aynı karede ayrı ayrı hesaplanıyordu (önbellek anahtarı
+`performance.now()`, her çağrıda farklı). Düzeltmeden sonra ana thread çoğunlukla boşta: GPU sınırı.
+
+**2) GPU: Cesium'un görsel ayarları** (birikimli kapatma, boş sahne): varsayılan 15 → MSAA 1× 24
+→ gökyüzü / atmosfer yok 30 → sis yok 61 → görüntü yok 76 → küre yok 101.
+
+| Ön ayar | boş sahne | 2000 birlik + 6 İHA |
+|---|---|---|
+| Cesium varsayılanı (`high`: MSAA 4×, atmosfer, sis) | 16 | 14 |
+| MSAA 1× + FXAA | 21 | 18 |
+| MSAA 1×, zemin atmosferi ve sis yok | 41 | 25 |
+| + gökyüzü yok | 58 | 26 |
+
+**3) GPU: İHA yüzeyleri.** "hepsi kapalı" ayarda: boş 58 · 2000 birlik 49 · 5000 birlik 40 ·
+1 İHA 54 · **6 İHA 28**. Her İHA'nın koni + iz poligonu (5 entity, `CallbackProperty`) her karede
+yeniden üçgenleniyordu. Tek ortak primitive'e (ham üçgen) geçince:
+
+| `balanced` (varsayılan) | FPS |
+|---|---|
+| boş sahne | 33 |
+| 2000 birlik + 6 İHA | 28–30 |
+| 2000 birlik + 6 İHA, `high` | 14–15 |
+| 2000 birlik + 6 İHA, `fast` | 36–38 |
+| 5000 birlik + 10 İHA | 25–27 |
+| üretim derlemesi, 1000 birlik + 3 İHA | 35 |
+
+**4) Çizim / düzenleme** (300 birlik + 2 İHA, `balanced`): boşta 29–30 · poligon çizerken (fare
+sürekli hareket) **6 → 25–27** (önizleme `CallbackProperty` yerine yalnız değişince yazılan sabit
+değer) · köşe taşırken 26.
+
+Çıkarımlar:
+
+1. **Cesium, MapLibre + deck.gl'den belirgin pahalı** (aynı makinede 2000 birlik: 120 → ~30 FPS):
+   küre + arazi + atmosfer. Entegre GPU'da varsayılan ayarlar kullanılamaz → `balanced` varsayılan,
+   kullanıcı `high` / `fast` seçebilir.
+2. **Arazi sorgusu pahalı** — her karede çağrılan her şey önbelleklenmeli (`GroundHeightCache`).
+3. **Dinamik Entity geometrisi (`CallbackProperty` poligon) her karede yeniden üretilir**: az sayıda
+   bile pahalı. Hareketli yüzeyler ham üçgenli tek primitive; nadiren değişenler sabit değer.
+4. Birliklerin araziye oturtulması (`CLAMP_TO_GROUND`) ana thread'in ~%9'u (2000 birlik, 1 Hz):
+   şimdilik kabul edilebilir; 10k+ için ölçülmeli (Faz 5 açık madde).
+5. Bu ölçümler entegre GPU'da; ayrık GPU'lu makinede ayrıca ölçülmeli ([karar #19](../decisions.md#açık-kararlar)).
+
 ## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
 
 Faz 1.5.3'ün tarayıcı gerektirmeyen kısmı. `@c2/map-core` (store + MapSync), hiçbir şey çizmeyen
