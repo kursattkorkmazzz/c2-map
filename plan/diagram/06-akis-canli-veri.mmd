@@ -1,0 +1,46 @@
+%% 06 — Canlı veri akışı: backend mesajı ekrana nasıl gelir?
+%% İki ingest yolu var: ana thread (createLayerStream) veya Worker (runIngestWorker + connectIngestWorker).
+%% Store'dan sonrası iki yolda da aynı. Canlı veri React'ten GEÇMEZ.
+sequenceDiagram
+  autonumber
+  participant BE as Backend (WebSocket)
+  participant W as Worker<br/>runIngestWorker + IngestEngine
+  participant ING as Ana thread ingest<br/>createLayerStream / connectIngestWorker
+  participant ST as MapStore
+  participant SY as MapSync
+  participant SC as Scheduler (rAF + maxApplyHz)
+  participant AD as MaplibreAdapter
+  participant ML as MapLibre (GeoJSONSource)
+  participant DK as DeckController (deck.gl)
+
+  alt ingest = main (varsayılan)
+    BE->>ING: mesaj (full veya patch, STREAM_FORMAT)
+    ING->>ING: normalize → Feature / FeaturePatch
+    ING->>ST: transaction: upsert / patch / removeFeatures<br/>(snapshot → replaceLayerContents)
+  else ingest = worker (ağır / verbose akış)
+    BE->>W: mesaj (Worker içindeki WebSocket, yeniden bağlanma)
+    W->>W: IngestEngine: id başına son hâl<br/>pencere başı → son hâl farkı (featureDelta)
+    loop her kare (geri basınç: cevap gelmeden yeni pull yok)
+      ING->>W: postMessage { type: "pull", transport: "json" }
+      W-->>ING: { type: "packet", packet (JSON metin), stats }
+      ING->>ST: applyIngestPacket → TEK transaction
+    end
+  end
+
+  Note over ST: transaction sonunda<br/>stabilize (aynı içerik → eski referans)<br/>diff → ChangeJournal maskeleri<br/>(GEOMETRY · STYLE · PROPS · META …)
+  ST-->>SY: subscribeChanges bildirimi
+  SY->>SC: requestFlush (kare başına bir kez)
+  SC-->>SY: flush()
+  SY->>ST: drainChanges() · getEffectiveFeature(id)<br/>(düzenleniyorsa taslak)
+  SY->>SY: LayerResolver: görünürlük · opaklık · zIndex · render group<br/>evaluate → upsert / remove / state<br/>runStages (sunum aşamaları)
+  SY->>AD: applyBatch(RenderBatch)<br/>basemaps · groups · features · state
+
+  AD->>AD: resolveRenderer(kind)
+  par MapLibre yolu (vektör, marker, şekiller)
+    AD->>ML: encode → parça farkı → updateData (kaynak başına tek fark)
+  and deck yolu (yoğun ikon, composite İHA)
+    AD->>DK: upsert / remove / setState
+    DK->>DK: ikon: typed array'e yaz (pos / size / color)<br/>composite: renderer katman üretir (glide)
+    AD->>DK: flush() → tek setProps
+  end
+  Note over AD,DK: Görsel durum (seçim / hover):<br/>MapLibre setFeatureState · deck marks katmanı

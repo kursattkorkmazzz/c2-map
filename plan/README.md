@@ -16,6 +16,8 @@
 - **"Neden böyle?" için:** [`design/`](design/) altındaki tasarım dokümanları. Faz dosyaları
   ilgili tasarım bölümüne link verir.
 - **Kararlar ve açık sorular:** [`decisions.md`](decisions.md) (karar kaydı + açık kararlar).
+- **Yapı ve akış diyagramları (Mermaid):** [`diagram/`](diagram/README.md) — core, MapLibre ve React yapısı,
+  core'un nerede kullanıldığı, canlı veri / etkileşim / çizim akışları.
 - **Ölçümler:** [`spike/findings.md`](spike/findings.md) — `apps/map-spike` **prototipinin** sonuçları
   (referans değerler). Gerçek paketlerle doğrulama Faz 1.5'te.
 

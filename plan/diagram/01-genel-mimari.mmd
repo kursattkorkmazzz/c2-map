@@ -1,0 +1,51 @@
+%% 01 — Genel mimari: üç paket ve veri akışı
+%% Ayrıntı: 02 (core), 03 (MapLibre), 04 (React); akışlar: 06, 07, 08
+flowchart LR
+  subgraph BE["Backend"]
+    WS[("WebSocket / REST<br/>birlikler, İHA'lar, kontrol tedbirleri")]
+  end
+
+  subgraph APP["Uygulama (ör. apps/map-spike)"]
+    UI["React ağacı<br/>&lt;Map&gt;, &lt;MapLayer&gt;, panel, kartlar"]
+    LC["lifecycle kancaları<br/>beforeCreate / Update / Delete<br/>(backend yetki + kayıt)"]
+  end
+
+  subgraph REACT["@c2/map-react — React binding"]
+    RMAP["&lt;Map&gt;<br/>store · router · MapSync kurar"]
+    RCOMP["Bildirimsel bileşenler<br/>MapLayer, MapFeature, CompositeFeature,<br/>MapBasemap, MapOverlay, MapTooltip,<br/>MapContextMenu, DrawToolbar"]
+    RHOOK["Hook'lar<br/>useFeature, useSelection, useMapEvent,<br/>useMapDraw, useMapEdit, useFeatureActions"]
+  end
+
+  subgraph CORE["@c2/map-core — motor ve framework bilmez"]
+    ING["ingest<br/>createLayerStream · Ingest Worker"]
+    STORE[("MapStore<br/>unsurlar · katmanlar · altlıklar<br/>seçim · hover · taslaklar")]
+    SYNC["MapSync<br/>kare başına tek fark paketi"]
+    ROUTER["EventRouter<br/>unsur → katman → global kabarma"]
+    CTRL["DrawController · EditController<br/>FeatureActions"]
+    GEO["geo<br/>UTM · MGRS · DMS · jeodezik<br/>şekiller · sensör izi"]
+    REG["Registry'ler<br/>kind · semboloji · altlık sağlayıcı"]
+  end
+
+  subgraph ML["@c2/map-maplibre — motor adapter'ı"]
+    ADP["MaplibreAdapter<br/>(MapAdapter sözleşmesi)"]
+    MAPLIBRE["MapLibre GL 6<br/>altlıklar · vektör · marker"]
+    DECK["deck.gl (interleaved)<br/>birlikler 50k · İHA 3B · halkalar"]
+  end
+
+  WS -- "JSON mesajları" --> ING
+  ING -- "transaction" --> STORE
+  UI --> RMAP & RCOMP & RHOOK
+  RCOMP -- "mikro görevde tek transaction" --> STORE
+  RHOOK -- "id bazlı abonelik" --> STORE
+  RMAP --> SYNC & ROUTER & CTRL
+  STORE -- "değişiklik günlüğü<br/>(drainChanges)" --> SYNC
+  SYNC -- "RenderBatch<br/>(applyBatch)" --> ADP
+  ADP --> MAPLIBRE & DECK
+  ADP -- "hit-test sonucu olay<br/>(emit)" --> ROUTER
+  ROUTER -- "dinleyiciler" --> RHOOK & CTRL
+  CTRL -- "setDrawMode / setDrawPreview" --> ADP
+  CTRL -- "taslak / izinli yazma" --> STORE
+  LC -. "async onay" .-> CTRL
+  REG -. "mount'ta verilir" .-> ADP
+  GEO -. "şekil → poligon, sensör izi" .-> ADP
+  GEO -. "ölçüm, koordinat" .-> CTRL & UI

@@ -1,0 +1,49 @@
+%% 07 — Etkileşim akışı: tıklama / hover / sağ tık nasıl işlenir?
+%% Adapter yalnız "ne vuruldu"yu bulur; karar core'da (EventRouter + varsayılan etkileşimler).
+sequenceDiagram
+  autonumber
+  actor U as Kullanıcı
+  participant ML as MapLibre (DOM olayları)
+  participant AD as MaplibreAdapter<br/>wireEvents + hitTest
+  participant DK as DeckController
+  participant RT as EventRouter (core)
+  participant APP as Dinleyiciler<br/>useFeatureEvent · useLayerEvent · useMapEvent
+  participant DEF as Varsayılan etkileşimler<br/>(Map bileşeni, router global)
+  participant ST as MapStore
+  participant SY as MapSync
+  participant UI as React hook'ları<br/>useSelection · useHovered · MapTooltip · MapContextMenu
+
+  U->>ML: click / mousemove / contextmenu
+  ML->>AD: olay (mousemove rAF ile kısılır)
+  AD->>DK: 1) deck.pick(point)
+  alt deck bir unsur buldu
+    DK-->>AD: featureId
+  else bulamadı
+    AD->>ML: 2) queryRenderedFeatures (yalnız etkileşimli katmanlar)
+    ML-->>AD: _fid (veya boş = harita)
+  end
+  AD->>RT: MapEventSink.emit({ type, featureId?, lngLat, point, modifiers })
+
+  Note over RT: Kabarma: unsur → katman → üst katmanlar → global<br/>(store.getFeature / getLayer ile zincir kurulur)
+  RT->>APP: unsur hedefli dinleyiciler
+  opt stopPropagation çağrılmadıysa
+    RT->>APP: katman zinciri dinleyicileri
+    RT->>DEF: global dinleyiciler
+  end
+
+  alt CLICK (çizim / düzenleme yokken)
+    DEF->>ST: applyClickSelection<br/>düz: tek seçim · Ctrl/⌘: aç-kapa · Shift: ekle · boşluk: temizle
+  else POINTER_ENTER / POINTER_LEAVE
+    DEF->>ST: setHovered(id | null)
+  else CONTEXT_MENU
+    RT->>UI: MapContextMenu açılır (Düzenle / Sil, izinlere göre)
+  end
+
+  par Haritaya yansıma
+    ST-->>SY: değişiklik (SELECTION / HOVER)
+    SY->>AD: applyBatch({ state: [{ id, selected, hovered }] })
+    AD->>ML: setFeatureState (MapLibre parçaları)
+    AD->>DK: setState → c2-deck-marks halkası
+  and UI'a yansıma
+    ST-->>UI: subscribeSelection / subscribeHover<br/>(useSyncExternalStore → yalnız ilgili bileşen render)
+  end

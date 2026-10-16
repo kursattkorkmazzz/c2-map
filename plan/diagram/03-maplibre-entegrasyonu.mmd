@@ -1,0 +1,80 @@
+%% 03 — @c2/map-maplibre: MaplibreAdapter'ın içi
+%% Tek adapter, iki çizici: MapLibre katmanları (statik / az değişen) + deck.gl (canlı, yoğun, 3B).
+%% Kod: packages/map-maplibre/src/
+flowchart TB
+  SYNC["MapSync (core)"] -- "applyBatch(RenderBatch)" --> APPLY
+
+  subgraph ADAPTER["MaplibreAdapter — adapter.ts"]
+    APPLY["applyBatch sırası<br/>0 altlıklar → 1 gruplar (+restack)<br/>2 unsurlar (sil / ekle-güncelle)<br/>3 kaldırılan gruplar → 4 görsel durum<br/>5 deck.flush (tek setProps)"]
+    RESOLVE{"resolveRenderer(kind)<br/>önce deckRenderers, sonra renderers<br/>yoksa FeatureKindRegistry.resolveFor"}
+    GROUPS["Render group başına<br/>GeoJSON kaynağı c2-src-&lt;grup&gt;<br/>promoteId: '_id'"]
+    STATE["Görsel durum<br/>MapLibre: setFeatureState (tüm parçalara)<br/>deck: DeckController.setState"]
+    EVENTS["wireEvents<br/>click · dblclick · contextmenu<br/>mousemove (rAF) · mouseout · moveend"]
+    HIT{"hitTest(point)<br/>1) deck.pick<br/>2) queryRenderedFeatures (etkileşimli katmanlar)"}
+    DRAWAPI["setDrawMode: çift tık zoom kapalı, artı imleç<br/>setDrawPreview: önizleme kaynağına setData"]
+    ANCHORS["Katman sırası yardımcıları<br/>firstLayerAbove(order) · restack<br/>altlık çapası · çizim çapası"]
+  end
+
+  subgraph BASE["basemaps.ts — BasemapController"]
+    B_CTRL["upsert / remove<br/>XYZ · WMTS · WMS (EPSG:3857 bbox) · TILEJSON · IMAGE<br/>opaklık / görünürlük yerinde; kaynak değişince baştan"]
+    B_AUTH["transformRequest<br/>URL öneki → BasemapProviderRegistry (auth)"]
+  end
+
+  subgraph MLPATH["MapLibre yolu — engine: maplibre"]
+    KREND["MaplibreKindRenderer<br/>layers(ctx) · encode(rf)"]
+    VEC["vectorRenderer<br/>fill · line · point"]
+    MARK["markerRenderer<br/>icon (sabit icon-size) · dot · halo"]
+    ENCODE["encode.ts<br/>parçalar (_id · _fid · _op · _z · _kind)<br/>diffPart → SourceDiffBuilder"]
+    GEOJ["geometry.ts toGeoJSONGeometry<br/>daire / elips / koridor / dikdörtgen →<br/>core shapeRings (jeodezik)"]
+    UPD["GeoJSONSource.updateData<br/>(kaynak başına TEK fark)"]
+  end
+
+  subgraph DECKPATH["deck.gl yolu — engine: deck (deck/)"]
+    DCTRL["DeckController<br/>MapLibreOverlay (interleaved) · addControl<br/>grup başına beforeId · pick · flush"]
+    ICONPATH["İkon yolu (DeckKindRenderer: icon, size)<br/>DeckGroupData: typed array<br/>pos Float64 · size Float32 · color Uint8<br/>swap-remove · posVersion / styleVersion"]
+    ICONL["IconLayer (grup başına)<br/>binary öznitelikler + updateTriggers"]
+    LAYERSPATH["Katman yolu (DeckLayersRenderer)<br/>composite: renderer kendi katmanlarını üretir<br/>load() mount'ta · interpolate (kayma)"]
+    UAV["uavRenderer<br/>ScenegraphLayer (glTF) · SolidPolygonLayer koni (_full3d)<br/>zemin izi · LineLayer · TextLayer<br/>core sensorFootprint"]
+    MARKS["ScatterplotLayer c2-deck-marks<br/>seçim / hover halkası"]
+    MOTION["Akıcı hareket<br/>MotionGovernor (off / on / auto, histerezis)<br/>ikon: animate · composite: glide (mesaj aralığı)"]
+  end
+
+  subgraph PREVIEW["draw-preview.ts"]
+    PRV["c2-draw-preview kaynağı<br/>fill · line · guide · vertex · midpoint · active"]
+  end
+
+  ROUTER["EventRouter (core)"]
+  CTRLS["DrawController / EditController (core)"]
+  LIKE["map-like.ts MapLike<br/>(testte FakeMap · FakeOverlay)"]
+
+  APPLY --> B_CTRL
+  APPLY --> GROUPS
+  APPLY --> RESOLVE
+  APPLY --> STATE
+  RESOLVE -- "maplibre" --> KREND
+  KREND --> VEC & MARK
+  KREND --> ENCODE --> UPD
+  ENCODE --> GEOJ
+  UPD --> GROUPS
+  RESOLVE -- "deck" --> DCTRL
+  DCTRL --> ICONPATH --> ICONL
+  DCTRL --> LAYERSPATH --> UAV
+  DCTRL --> MARKS & MOTION
+  STATE --> DCTRL
+  ANCHORS -. "beforeId" .-> GROUPS & DCTRL & B_CTRL
+  B_CTRL --> B_AUTH
+  EVENTS --> HIT
+  HIT -- "deck önce" --> DCTRL
+  HIT -- "MapEventSink.emit" --> ROUTER
+  CTRLS -- "setDrawMode / setDrawPreview" --> DRAWAPI --> PRV
+  ADAPTER -. "yalnız MapLike arayüzünü kullanır" .-> LIKE
+
+  subgraph STACK["MapLibre katman yığını (alttan üste)"]
+    direction BT
+    L0["c2-background (stil)"]
+    L1["c2-bm-&lt;id&gt; altlık raster / image katmanları (order'a göre)"]
+    L2["c2-basemap-top — altlık çapası (görünmez)"]
+    L3["Render group katmanları, order'a göre<br/>c2-&lt;grup&gt;-&lt;kind&gt;-&lt;sonek&gt;<br/>+ deck taşıyıcıları deck-maplibre-layer-group-before:&lt;id&gt;"]
+    L4["c2-draw-fill … c2-draw-active — çizim önizlemesi<br/>(çizim çapası: hep en üstte, deck dahil her şey altında)"]
+    L0 --> L1 --> L2 --> L3 --> L4
+  end

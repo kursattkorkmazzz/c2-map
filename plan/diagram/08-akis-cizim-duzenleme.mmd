@@ -1,0 +1,75 @@
+%% 08 — Çizim, düzenleme ve silme: lifecycle kancalarıyla
+%% Kural: kanca cevap verene kadar store'a dokunulmaz. Kanca false → iptal (REJECTED);
+%% true → olduğu gibi yaz; Feature dönerse → onu yaz (ör. backend id / rev). Hata / zaman aşımı uygulamanın.
+sequenceDiagram
+  autonumber
+  actor U as Kullanıcı
+  participant TB as DrawToolbar<br/>useMapDraw · useMapEdit · useFeatureActions
+  participant DC as DrawController
+  participant EC as EditController
+  participant FA as FeatureActions
+  participant LC as Uygulama lifecycle<br/>beforeCreate / beforeUpdate / beforeDelete
+  participant ST as MapStore
+  participant AD as Adapter<br/>setDrawMode · setDrawPreview
+  participant SY as MapSync
+
+  rect rgba(120, 160, 255, 0.12)
+  Note over U,SY: 1) Çizim (karar 8 B: araçlar core'da, adapter yalnız girdi + önizleme)
+  U->>TB: araç seç (nokta · çizgi · poligon · daire · dikdörtgen · koridor · elips)
+  TB->>DC: start(kind) → Promise (Geometry veya null)
+  DC->>AD: setDrawMode(true) (çift tık zoom kapalı, artı imleç)
+  loop her tık / hareket (EventRouter: CLICK · POINTER_MOVE)
+    DC->>DC: tool.click / move · ölçüm (geo: distance · polygonArea)
+    DC->>AD: setDrawPreview(preview) → c2-draw-* katmanları
+    DC-->>TB: getState → ipucu + canlı ölçüm
+  end
+  U->>DC: çift tık / Enter (Esc: iptal, Backspace: geri al)
+  DC->>AD: setDrawPreview(null) · setDrawMode(false)
+  DC-->>TB: DRAW_COMPLETE · Promise → Geometry
+  TB->>FA: create(feature) (layerId verilmişse)
+  FA->>LC: await beforeCreate(feature)
+  alt true / Feature
+    FA->>ST: transaction: upsertFeatures([final])
+    ST-->>SY: değişiklik → applyBatch → haritada
+  else false
+    FA-->>TB: REJECTED (store değişmedi)
+  end
+  end
+
+  rect rgba(120, 220, 160, 0.12)
+  Note over U,SY: 2) Düzenleme (taslak: store.drafts)
+  U->>TB: Düzenle (sağ tık menü / panel)
+  TB->>EC: start(id) — canEdit değilse DENIED
+  EC->>ST: setDraft(feature) — asıl kayıt + base saklanır
+  Note over ST,SY: MapSync getEffectiveFeature → taslağı çizer.<br/>Akıştan gelen güncelleme asıl kaydı değiştirir, ekran taslakta kalır (META)
+  loop tutamaç sürükle (köşe · ara nokta · merkez · yarıçap · eksen · genişlik)
+    EC->>ST: setDraft({ ...geometry })
+    EC->>AD: setDrawPreview(tutamaçlar)
+  end
+  U->>TB: Kaydet
+  TB->>EC: save()
+  EC->>FA: update({ ...draft, rev: base.rev })
+  FA->>LC: await beforeUpdate(next, prev)
+  alt true
+    FA->>ST: upsertFeatures([next − rev]) (eski rev "bayat" sayılmasın)
+    EC->>ST: clearDraft(id)
+  else Feature (backend yeni rev verdi)
+    FA->>ST: upsertFeatures([dönen])
+    EC->>ST: clearDraft(id)
+  else false
+    FA-->>EC: REJECTED → taslak kalır, panelde hata
+  end
+  Note over EC: Çakışma: asıl kayıt ≠ draft.base (akış değiştirdi) → panelde uyarı
+  end
+
+  rect rgba(255, 160, 120, 0.12)
+  Note over U,SY: 3) Silme
+  U->>TB: Sil (sağ tık menü)
+  TB->>FA: delete(id) — deletable:false ise DENIED · bekleyen varsa BUSY
+  FA->>LC: await beforeDelete(feature) (ör. backend'e DELETE)
+  alt true
+    FA->>ST: removeFeatures([id]) (idempotent)
+  else false
+    FA-->>TB: REJECTED → unsur yerinde
+  end
+  end

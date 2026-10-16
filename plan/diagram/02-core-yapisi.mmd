@@ -1,0 +1,132 @@
+%% 02 — @c2/map-core: modüller, ana sınıf / fonksiyonlar ve iç bağımlılıklar
+%% Kutu = klasör (packages/map-core/src/…). Ok = "kullanır / import eder".
+%% Motor ve framework bilmez: MapLibre, deck.gl, React import edilmez (tek dış bağımlılık: geographiclib).
+flowchart TB
+  subgraph MODEL["model/ — veri tipleri"]
+    M_FEAT["Feature<br/>id · layerId · kind · geometry<br/>style · props (görsel) · meta (görsel değil)<br/>z · hidden · selectable · editable · deletable · rev"]
+    M_GEOM["Geometry · GEOMETRY_KIND<br/>point · line · polygon · multi-*<br/>circle · rectangle · corridor · ellipse"]
+    M_LAYER["Layer<br/>parentId · visible · opacity · renderGroup<br/>minZoom/maxZoom · selectable · editable · deletable"]
+    M_BASE["Basemap · BASEMAP_SOURCE<br/>xyz · wmts · wms · tilejson · image · vector-style"]
+    M_CAM["CameraView · Bounds · LngLat"]
+  end
+
+  subgraph STORE["store/ — tek doğruluk kaynağı"]
+    S_STORE["MapStore (createMapStore)<br/>getFeature · getEffectiveFeature · getDraft<br/>subscribeFeature / Layer / Selection / Hover / Changes"]
+    S_TX["MapTx (transaction içinde)<br/>upsert / patch / removeFeatures · replaceLayerContents<br/>upsert / patch / move / removeLayers · basemaps<br/>select · clearSelection · setHovered · setDraft · clearDraft"]
+    S_JOURNAL["ChangeJournal<br/>id başına birleşen değişiklik maskeleri<br/>(FEATURE_CHANGE · LAYER_CHANGE · BASEMAP_CHANGE)"]
+    S_DIFF["diff.ts<br/>diffFeature / Layer / Basemap → maske<br/>mergeFeaturePatch (style/props/meta sığ)"]
+    S_STAB["stabilize.ts<br/>deepEqual · geometryEqual<br/>aynı içerik → eski referans"]
+  end
+
+  subgraph EVENTS["events/"]
+    E_ROUTER["EventRouter<br/>on(type, listener, target?) · emit(input)<br/>unsur → katman zinciri → global; stopPropagation"]
+    E_TYPES["MAP_EVENT · MapEventInput<br/>PointerModifiers (shift/ctrl/alt/meta)"]
+  end
+
+  subgraph SYNC["sync/ — store → adapter köprüsü"]
+    Y_SYNC["MapSync<br/>start · stop · flush · setView · setStages<br/>rendered haritası (adapter'da ne var)"]
+    Y_RES["LayerResolver<br/>efektif görünürlük · opaklık · zIndex · render group"]
+    Y_PRES["PresentationStage · runStages<br/>(kümeleme için boş genişleme noktası)"]
+    Y_SCHED["Scheduler<br/>createFrameScheduler (rAF + maxApplyHz)<br/>createManualScheduler (test)"]
+  end
+
+  subgraph ADAPTER["adapter/ — motor sözleşmesi"]
+    A_IFACE["MapAdapter (arayüz)<br/>mount · unmount · applyBatch · kamera · project<br/>registerRenderer · setDrawMode · setDrawPreview"]
+    A_BATCH["RenderBatch · RenderFeature · RenderGroup<br/>RENDER_CHANGE (OPACITY · Z_INDEX · GROUP)<br/>FeatureStatePatch · MapCapabilities"]
+    A_MOCK["MockAdapter (test)"]
+  end
+
+  subgraph REGISTRY["registry/"]
+    R_KIND["FeatureKindRegistry<br/>resolveFor (fallback zinciri)"]
+    R_SYM["SymbologyRegistry"]
+    R_BASE["BasemapProviderRegistry<br/>resolveSource · transformRequest"]
+    R_BOUNDS["geometryBounds"]
+  end
+
+  subgraph INGEST["ingest/ — backend → store"]
+    I_STREAM["createLayerStream<br/>update · snapshot · remove<br/>STREAM_FORMAT full | patch · normalize"]
+    subgraph WORKER["ingest/worker/ — isteğe bağlı Worker"]
+      W_ENGINE["IngestEngine<br/>son hâl · pencere başı → son hâl farkı<br/>birleştirme · touch · drain"]
+      W_DELTA["featureDelta · canMergePatches · mergePatches"]
+      W_RUN["runIngestWorker (Worker'da)<br/>WebSocket + yeniden bağlanma · onCommand"]
+      W_CONN["connectIngestWorker (ana thread)<br/>kare başına pull · applyIngestPacket"]
+    end
+  end
+
+  subgraph ACTIONS["actions/ — izinli kullanıcı işlemleri"]
+    X_ACT["FeatureActions<br/>create · update · delete · canEdit · canDelete<br/>bayrak → lifecycle kancası → store"]
+    X_LC["FeatureLifecycle · ACTION_RESULT<br/>beforeCreate / beforeUpdate / beforeDelete"]
+  end
+
+  subgraph DRAW["draw/ — çizim (karar #8: B)"]
+    D_CTRL["DrawController<br/>start · finish · undo · cancel · key · getState"]
+    D_TOOLS["createDrawTool<br/>nokta · çizgi · poligon · daire<br/>dikdörtgen · koridor · elips"]
+    D_TYPES["DrawPreview · DrawState · DrawMeasurement"]
+  end
+
+  subgraph EDIT["edit/ — düzenleme"]
+    T_CTRL["EditController<br/>start · save · undo · cancel · key<br/>çakışma (base ≠ asıl kayıt)"]
+    T_HANDLES["handlesOf · moveHandle · removeHandle<br/>köşe · ara nokta · merkez · yarıçap · eksen · genişlik"]
+  end
+
+  subgraph GEO["geo/ — saf hesaplar"]
+    G_GEOD["geodesic (geographiclib)<br/>distance · bearing · destination<br/>polygonArea · geodesicCircle"]
+    G_SHAPES["shapes<br/>shapeRings · ellipseRing · corridorRing"]
+    G_SENSOR["sensor<br/>sensorFootprint (kamera konisi → zemin)"]
+    G_COORD["utm · mgrs · dms<br/>toUtm/fromUtm · toMgrs/parseMgrs<br/>formatCoordinate · parseCoordinate"]
+  end
+
+  %% model
+  M_FEAT --> M_GEOM
+  M_GEOM --> M_CAM
+
+  %% store
+  S_STORE --> S_TX & S_JOURNAL & S_DIFF & S_STAB
+  S_STORE --> M_FEAT & M_LAYER & M_BASE
+  S_DIFF --> S_STAB
+
+  %% events
+  E_ROUTER -- "kabarma zinciri için okur<br/>(getFeature / getLayer)" --> S_STORE
+  E_ROUTER --> E_TYPES
+
+  %% sync
+  Y_SYNC -- "drainChanges · getEffectiveFeature<br/>getSelection · getHovered" --> S_STORE
+  Y_SYNC --> Y_RES & Y_PRES & Y_SCHED
+  Y_SYNC -- "applyBatch(RenderBatch)" --> A_IFACE
+  Y_RES --> S_STORE
+  A_IFACE --> A_BATCH
+  A_MOCK -. "uygular" .-> A_IFACE
+  A_IFACE -- "mount'ta alır" --> R_KIND & R_SYM & R_BASE
+  A_IFACE -- "emit (MapEventSink)" --> E_ROUTER
+
+  %% ingest
+  I_STREAM -- "transaction" --> S_TX
+  W_ENGINE --> W_DELTA
+  W_ENGINE -- "normalize sözleşmesi" --> I_STREAM
+  W_DELTA --> S_STAB & S_DIFF
+  W_RUN --> W_ENGINE
+  W_CONN -- "tek transaction" --> S_TX
+  W_RUN <-. "postMessage (pull / packet)" .-> W_CONN
+
+  %% actions
+  X_ACT --> X_LC
+  X_ACT -- "bayrak zinciri · yazma" --> S_STORE
+
+  %% draw
+  D_CTRL -- "CLICK · DBLCLICK · POINTER_MOVE<br/>DRAW_UPDATE / DRAW_COMPLETE" --> E_ROUTER
+  D_CTRL -- "setDrawMode · setDrawPreview · project" --> A_IFACE
+  D_CTRL --> D_TOOLS & D_TYPES
+  D_TOOLS -- "ölçüm" --> G_GEOD
+
+  %% edit
+  T_CTRL -- "setDraft / clearDraft · getDraft" --> S_STORE
+  T_CTRL -- "kaydet: update (beforeUpdate)" --> X_ACT
+  T_CTRL --> E_ROUTER
+  T_CTRL -- "önizleme · tutamaç seçimi" --> A_IFACE
+  T_CTRL --> T_HANDLES
+  T_HANDLES --> G_GEOD
+
+  %% geo
+  G_SHAPES --> G_GEOD
+  G_SENSOR --> G_GEOD
+  R_BOUNDS --> M_GEOM

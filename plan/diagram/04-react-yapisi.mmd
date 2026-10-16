@@ -1,0 +1,72 @@
+%% 04 — @c2/map-react: <Map>, context'ler, bileşenler, hook'lar
+%% Motor bilmez: adapter dışarıdan verilir. Canlı veri React'ten GEÇMEZ (akış → store);
+%% bileşenler yalnız bildirimsel / az sayıda unsur yazar, hook'lar id bazlı abone olur.
+flowchart TB
+  APPCODE["Uygulama<br/>adapter = createMaplibreAdapter(...)<br/>store = createMapStore() (isteğe bağlı)<br/>lifecycle = { beforeCreate, beforeUpdate, beforeDelete }"]
+
+  subgraph MAP["&lt;Map adapter initialView store? lifecycle? defaultInteractions? ref&gt; — map.tsx"]
+    direction TB
+    M_STORE["MapStore<br/>prop → MapStoreProvider → yeni"]
+    M_ROUTER["EventRouter(store)"]
+    M_WRITER["DeclarativeWriter(store)<br/>yazmaları mikro görevde TEK transaction"]
+    M_ACTIONS["FeatureActions(store)<br/>setLifecycle(props.lifecycle)"]
+    M_DRAW["DrawController({ events: router, adapter })"]
+    M_EDIT["EditController({ store, actions, events, adapter })"]
+    M_MOUNT["mount effect<br/>adapter.mount(container) — adapter başına söz zinciri<br/>(StrictMode / kapat-aç güvenli)<br/>→ new MapSync(store, adapter).start()<br/>→ VIEW_CHANGE → sync.setView · ResizeObserver"]
+    M_DEFAULT["Varsayılan etkileşimler (router global)<br/>CLICK → applyClickSelection (Ctrl/⌘ toggle, Shift ekle)<br/>POINTER_ENTER/LEAVE → setHovered<br/>çizim / düzenleme sürerken kapalı"]
+    M_KEYS["Klavye (çizim / düzenleme sürerken)<br/>Esc · Enter · Backspace → edit.key / draw.key"]
+    M_HANDLE["MapHandle (useMap · ref)<br/>flyTo · setView · fitBounds · getView · project"]
+  end
+
+  subgraph CTX["context.ts"]
+    C_STORE["StoreContext — store"]
+    C_MAP["MapContext — store · router · adapter · writer<br/>ready · handle · draw · edit · actions"]
+    C_LAYER["LayerContext — ebeveyn katman id"]
+  end
+
+  subgraph COMP["Bileşenler — components/"]
+    P_LAYER["&lt;MapLayer&gt; (iç içe)<br/>editable · deletable · renderGroup"]
+    P_FEAT["&lt;MapFeature&gt; + Polygon · Polyline · Circle<br/>Marker · MilSymbol · CompositeFeature"]
+    P_BASE["&lt;MapBasemap&gt;"]
+    P_DECL["useDeclarative<br/>mount → upsert · prop değişimi → patch (yalnız değişen)<br/>unmount → yalnız kendi id'si silinir"]
+    P_OVER["&lt;MapOverlay anchor align&gt;<br/>rAF + adapter.project → DOM transform"]
+    P_TIP["&lt;MapTooltip&gt;<br/>useHovered + POINTER_MOVE → DOM"]
+    P_MENU["&lt;MapContextMenu&gt;<br/>CONTEXT_MENU · Esc / dışarı / hareket kapatır"]
+    P_TOOL["&lt;DrawToolbar layerId?&gt;<br/>7 araç · ipucu · canlı ölçüm<br/>düzenleme paneli (Kaydet / Geri al / İptal, çakışma)"]
+  end
+
+  subgraph HOOKS["Hook'lar — hooks/"]
+    H_STORE["store-hooks<br/>useMapStore · useFeature(id, selector, isEqual)<br/>useLayer · useLayerVisibility · useSelection<br/>useHovered · useBasemaps · useMap · useMapReady"]
+    H_EVENT["event-hooks (latest-ref)<br/>useMapEvent · useLayerEvent · useFeatureEvent"]
+    H_DRAW["useMapDraw<br/>state · start(tool) → Promise&lt;Geometry&gt;"]
+    H_EDIT["useMapEdit<br/>state · start(id) · save · undo · cancel"]
+    H_ACT["useFeatureActions · useFeaturePermissions(id)<br/>canEdit · canDelete · pending"]
+  end
+
+  CORE[("@c2/map-core<br/>MapStore · EventRouter · MapSync<br/>DrawController · EditController · FeatureActions")]
+  ADP["MapAdapter (ör. MaplibreAdapter)"]
+
+  APPCODE --> MAP
+  MAP --> C_STORE & C_MAP
+  M_MOUNT --> ADP
+  M_DRAW & M_EDIT -- "setDrawMode / setDrawPreview" --> ADP
+  M_STORE & M_ROUTER & M_ACTIONS & M_DRAW & M_EDIT -. "örnekleri" .-> CORE
+
+  P_LAYER --> C_LAYER
+  P_FEAT -- "layerId" --> C_LAYER
+  P_LAYER & P_FEAT & P_BASE --> P_DECL --> M_WRITER
+  M_WRITER -- "store.transaction" --> M_STORE
+  P_OVER -- "adapter.project" --> C_MAP
+  P_TIP --> H_STORE & M_ROUTER
+  P_MENU --> M_ROUTER
+  P_TOOL --> H_DRAW & H_EDIT & H_ACT
+
+  H_STORE -- "useSyncExternalStore<br/>subscribeFeature / Layer / Selection …" --> C_STORE
+  H_EVENT -- "router.on" --> C_MAP
+  H_DRAW --> M_DRAW
+  H_EDIT --> M_EDIT
+  H_ACT --> M_ACTIONS
+  H_DRAW -. "start → edit.cancel" .-> M_EDIT
+  H_EDIT -. "start → draw.cancel" .-> M_DRAW
+
+  OUTSIDE["Harita dışı panel / LayerTree<br/>&lt;MapStoreProvider store&gt;"] -- "store hook'ları" --> C_STORE

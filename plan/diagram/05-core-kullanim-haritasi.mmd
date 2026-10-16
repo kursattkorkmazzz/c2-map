@@ -1,0 +1,96 @@
+%% 05 — Core kullanım haritası: @c2/map-core'un hangi parçası, hangi dosyada, ne için kullanılıyor
+%% Kaynak: dosyaların `import { … } from '@c2/map-core'` satırları (2026-10-16). Ok etiketi = içe aktarılan adlar.
+%% Testler ve test yardımcıları hariç.
+flowchart LR
+  subgraph CORE["@c2/map-core"]
+    direction TB
+    C_MODEL["model<br/>Feature · Geometry · GEOMETRY_KIND · Layer<br/>Basemap · BASEMAP_SOURCE · LngLat · CameraView · Bounds"]
+    C_STORE["store<br/>createMapStore · MapStore · MapTx<br/>SELECT_MODE · FEATURE_CHANGE · FeaturePatch"]
+    C_EVENTS["events<br/>EventRouter · MAP_EVENT · MapEventSink<br/>PointerModifiers · MapEventType/Target · ScreenPoint"]
+    C_SYNC["sync<br/>MapSync · createFrameScheduler · Scheduler"]
+    C_ADAPTER["adapter<br/>MapAdapter · MountOptions · RenderBatch<br/>RenderFeature · RenderGroup · RENDER_CHANGE(_ALL)<br/>FeatureStatePatch · FeatureVisualState · MapCapabilities"]
+    C_REG["registry<br/>FeatureKindRegistry · SymbologyRegistry<br/>BasemapProviderRegistry"]
+    C_INGEST["ingest<br/>createLayerStream · STREAM_FORMAT · StreamItem"]
+    C_WORKER["ingest/worker<br/>runIngestWorker · connectIngestWorker · IngestApi"]
+    C_ACTIONS["actions<br/>FeatureActions · FeatureLifecycle<br/>ActionResult · FeaturePermissions"]
+    C_DRAW["draw<br/>DrawController · DRAW_TOOL · DrawPreview<br/>DrawState · DrawToolKind · DrawMeasurement"]
+    C_EDIT["edit<br/>EditController · EditState"]
+    C_GEO["geo<br/>shapeRings · sensorFootprint · distance · destination<br/>formatDistance · formatArea · formatCoordinate<br/>parseCoordinate · toMgrs"]
+  end
+
+  subgraph ML["@c2/map-maplibre"]
+    direction TB
+    F_ADP["adapter.ts<br/>MaplibreAdapter"]
+    F_BASE["basemaps.ts"]
+    F_DECK["deck/deck-controller.ts"]
+    F_UAV["deck/uav-renderer.ts"]
+    F_PRV["draw-preview.ts"]
+    F_GEOM["geometry.ts"]
+    F_REND["renderers/ (types · vector · marker)"]
+  end
+
+  subgraph RE["@c2/map-react"]
+    direction TB
+    R_MAP["map.tsx — &lt;Map&gt;"]
+    R_CTX["context.ts · map-handle.ts"]
+    R_WRITE["declarative-writer.ts · use-declarative.ts"]
+    R_COMP["map-layer · map-feature · map-basemap"]
+    R_UI["map-tooltip · map-context-menu · map-overlay"]
+    R_TOOL["draw-toolbar.tsx"]
+    R_HSTORE["hooks/store-hooks.ts"]
+    R_HEVT["hooks/event-hooks.ts"]
+    R_HDE["hooks/use-map-draw · use-map-edit<br/>use-feature-actions"]
+  end
+
+  subgraph SP["apps/map-spike (demo / ölçüm)"]
+    direction TB
+    S_CORE["core/core-main.ts — core.html"]
+    S_WORKER["core/ingest.worker.ts · core/unit-feed.ts"]
+    S_REACT["react/react-main.tsx — react.html"]
+    S_UAV["react/uav-sim.ts"]
+  end
+
+  %% @c2/map-maplibre
+  C_ADAPTER -- "MapAdapter uygular · RenderBatch / RenderFeature / RenderGroup<br/>FeatureStatePatch · MountOptions · MapCapabilities" --> F_ADP
+  C_EVENTS -- "MAP_EVENT · MapEventSink (hit-test → emit)" --> F_ADP
+  C_REG -- "FeatureKindRegistry (fallback)" --> F_ADP
+  C_DRAW -- "DrawPreview (setDrawPreview)" --> F_ADP & F_PRV
+  C_STORE -- "FEATURE_CHANGE (değişen bitler)" --> F_ADP & F_DECK
+  C_REG -- "BasemapProviderRegistry (auth, custom kaynak)" --> F_BASE
+  C_MODEL -- "Basemap · BASEMAP_SOURCE" --> F_BASE
+  C_ADAPTER -- "RenderFeature · RENDER_CHANGE · FeatureVisualState" --> F_DECK
+  C_GEO -- "sensorFootprint (koni / iz)" --> F_UAV
+  C_GEO -- "shapeRings (daire · elips · koridor · dikdörtgen)" --> F_GEOM
+  C_MODEL -- "Feature · Geometry · GEOMETRY_KIND" --> F_GEOM & F_REND & F_UAV
+
+  %% @c2/map-react
+  C_STORE -- "createMapStore · MapStore · MapTx · SELECT_MODE" --> R_MAP
+  C_EVENTS -- "EventRouter · MAP_EVENT · PointerModifiers" --> R_MAP
+  C_SYNC -- "MapSync · Scheduler" --> R_MAP
+  C_REG -- "üç registry (mount için)" --> R_MAP
+  C_ACTIONS -- "FeatureActions · FeatureLifecycle" --> R_MAP
+  C_DRAW -- "DrawController" --> R_MAP & R_CTX
+  C_EDIT -- "EditController" --> R_MAP & R_CTX
+  C_ADAPTER -- "MapAdapter · MapCapabilities" --> R_CTX
+  C_STORE -- "MapStore · MapTx (transaction)" --> R_WRITE
+  C_MODEL -- "Layer · Feature · Geometry · Basemap" --> R_COMP
+  C_EVENTS -- "MAP_EVENT (POINTER_MOVE · CONTEXT_MENU) · ScreenPoint" --> R_UI
+  C_DRAW -- "DRAW_TOOL · DrawToolKind · DrawMeasurement" --> R_TOOL
+  C_GEO -- "formatDistance · formatArea (canlı ölçüm)" --> R_TOOL
+  C_ACTIONS -- "ActionResult" --> R_TOOL
+  C_STORE -- "SELECT_MODE · MapStore · Unsubscribe" --> R_HSTORE
+  C_EVENTS -- "MapEventType · MapEventTarget · MapEventListener" --> R_HEVT
+  C_DRAW -- "DrawState · DrawToolOptions" --> R_HDE
+  C_EDIT -- "EditState" --> R_HDE
+  C_ACTIONS -- "FeatureActions · FeaturePermissions" --> R_HDE
+
+  %% apps/map-spike
+  C_STORE -- "createMapStore" --> S_CORE & S_REACT
+  C_SYNC -- "MapSync · createFrameScheduler (ölçüm sarmalayıcı)" --> S_CORE
+  C_EVENTS -- "EventRouter · MAP_EVENT" --> S_CORE
+  C_INGEST -- "createLayerStream (ingest=main)" --> S_CORE & S_REACT & S_UAV
+  C_WORKER -- "connectIngestWorker (ingest=worker)" --> S_CORE
+  C_WORKER -- "runIngestWorker · IngestApi" --> S_WORKER
+  C_GEO -- "parseCoordinate · toMgrs · formatCoordinate · distance" --> S_REACT
+  C_GEO -- "destination (yörünge)" --> S_UAV
+  C_ACTIONS -- "FeatureLifecycle (sahte backend)" --> S_REACT
