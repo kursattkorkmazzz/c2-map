@@ -303,3 +303,50 @@ Bugünden uyulacak kurallar:
 - Seçim ve feature-state gerçek id'ler üzerinden kalır; kümelenen seçili unsur kümeyi vurgular.
 - Aşama kind'den bağımsızdır (konum + kimlik yeter); sembol-farkında kümeleme sonra
   `kind`'e özel bir `clusterKey(f)` ile eklenir.
+
+### Kümeleme (Faz 4.2)
+
+> 2026-10-16 — Kod: `map-core/src/cluster/` (`ClusterStage`, `bindClusterEvents`, `clusterBadge`),
+> renderer'lar `map-maplibre/src/deck/cluster-renderer.ts` (`clusterIconRenderer`),
+> `map-cesium/src/renderers/cluster.ts` (`cesiumClusterRenderer`); React `<Map stages>`.
+> Demo: `react.html` / `cesium.html` (panelde "Kümeleme", URL `cluster=0|1`).
+
+```ts
+const stage = new ClusterStage({
+  filter: (f) => f.layerId === 'birlikler',          // yalnız birlikler (İHA, çizim kümelenmez)
+  clusterKey: (f) => sidc(f)[3],                    // sembol-farkında: dost / düşman ayrı kümede
+  keyOffsetPx: (key) => OFFSETS[key],               // aynı hücredeki anahtarlar üst üste binmesin
+  minPoints: 3, cellPx: 64, maxZoom: 13,
+});
+<Map adapter={…} stages={useMemo(() => [stage], [])}>   // MapSync.setStages; değişince yerinde
+createMaplibreAdapter({ deckRenderers: { cluster: clusterIconRenderer({ color }), … } })
+createCesiumAdapter({ renderers: { cluster: cesiumClusterRenderer({ color }), … } })
+```
+
+- **Izgara, artımlı (supercluster değil).** Hücre = Web Mercator'da tam sayı zoom'da `cellPx`'lik
+  kare, dünyaya sabit. Nokta güncellenince yalnız eski / yeni hücresi kirlenir; aynı hücrede kalan
+  noktada hücre anahtarı bile kurulmaz. supercluster her değişiklikte tüm indeksi baştan kurar —
+  canlı akışta (her saniye binlerce hareket) uygun değil. Bedeli: hücre sınırına düşen iki yakın
+  nokta ayrı kalabilir; düzgün dağılmış veride kümeler ızgara gibi dizilir.
+- **Zoom:** kümeler tam sayı zoom'a bağlı; kaydırma hiçbir şeyi değiştirmez, eşik geçilince
+  (`onViewChange`) baştan kurulur (50k: ~100 ms, Node). `maxZoom` ve üstünde kümeleme yok.
+- **Çıktı farkla:** kümeye giren unsur için `remove`, çıkan için tüm bitlerle `upsert` + saklanan
+  görsel durumu; gizli unsurun güncellemesi / silinmesi adapter'a hiç gitmez. Küme merkezi ~2 px'ten
+  az kaydıysa küme güncellenmez. Sonuç (50k, z6, flush başına 5000 hareket): adapter'a giden işlem
+  5000 → 3.
+- **Sentetik unsur:** id `cluster:<zoom>|<grup>|<anahtar>|<x>|<y>`, kind `cluster`, props
+  `{ count, key }`; grubu ve sırası üyelerinden. Store'a yazılmaz.
+- **Seçim:** gerçek id'lerde kalır. Gizli unsurun durumu saklanır; seçiliyse kümesi `selected`
+  alır (adapter'ın normal halkası). Küme açılınca durum unsura geri gönderilir.
+- **Olay:** adapter hit-test'te kümeyi bulur, normal `CLICK` basar; `bindClusterEvents` bunu içerik
+  (`ClusterInfo`: üye id'leri, sınır kutusu, merkez) eklenmiş `CLUSTER_CLICK`'e çevirir. `<Map>`
+  bunu küme veren aşamalar için kendisi bağlar. Varsayılan etkileşim: kümeye tıklama seçimi
+  değiştirmez, kümeye yakınlaşır (`zoomToCluster`: üyeleri sığdır; hepsi aynı noktadaysa +2 zoom).
+- **Aşama ekleme / kaldırma:** `MapSync.setStages` çıkan aşamanın `onRemove`'unu çağırır (kümeleri
+  siler); görünen her şey tüm bitlerle yeniden gönderilir. Sonradan eklenen aşama adapter'da zaten
+  olan unsurları gizlerken `remove` gönderir.
+- **Rozet** (`clusterBadge`, çekirdekte, canvas — tarayıcı gerektirir): renkli daire + sayı; etiket
+  kümesi sınırlı (1–99 tam, sonra iki anlamlı basamak, binler "b") → sayı değiştikçe yeni doku
+  üretilmez. MapLibre'de deck ikon yolu (birliklerle aynı katman), Cesium'da billboard.
+- **Sınır:** kümeleme harita düzleminde; Cesium'un eğik 3B görünümünde ufka doğru kümeler ekranda
+  sıklaşır (ekran-uzayı kümeleme açık madde).

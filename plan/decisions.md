@@ -8,6 +8,8 @@ Yeni karar en üste eklenir. Bir karar değişirse eskisi silinmez, "yerine geç
 
 | Tarih | Karar | Gerekçe | Ayrıntı |
 |---|---|---|---|
+| 2026-10-16 | **Kümeleme ızgara tabanlı ve artımlı** (supercluster değil); sunum aşaması `ClusterStage`, küme `cluster:` id'li sentetik unsur | Canlı akışta supercluster indeksi her güncellemede baştan kurar; ızgarada hareket yalnız iki hücreyi kirletir. 50k / 1 Hz'de aşama ~42 ms/sn, adapter işi 5000 → 3 / flush | [04](design/04-sync-and-rendering.md#kümeleme-faz-42), [findings](spike/findings.md#kümeleme-faz-42-2026-10-16) |
+| 2026-10-16 | Kümeye tıklama varsayılanı: seçimi değiştirmez, kümeye yakınlaşır; seçili unsur içeren küme vurgulanır | Küme bir "yer tutucu"; seçim gerçek unsurlarda kalmalı | [04](design/04-sync-and-rendering.md#kümeleme-faz-42) |
 | 2026-10-16 | **Cesium adapter'ı (`@c2/map-cesium`) ion'suz**: arazi Terrarium (AWS Open Data), görüntü store altlıklarından (demo: Esri World Imagery) | Ücretsiz, anahtarsız; kurum içi karo sunucusuyla da aynı format. Çekirdek ve React değişmeden çalıştı | [08](design/08-extensibility-symbology.md#cesium-arazi), [phase-5](phases/phase-5-3d.md) |
 | 2026-10-16 | Cesium renderer sözleşmesi **imperatif**: `create` / `update` / `remove` / `setState` (+ `init` / `destroy`); hit-test için renderer motor nesnesini unsura bağlar (`own`) | Cesium sahne grafiği; MapLibre'nin "kodla, motor çizsin" modeli uymaz | [04](design/04-sync-and-rendering.md#cesium-yolu) |
 | 2026-10-16 | **`UavProps`, `interpolateUav` çekirdeğe taşındı; `altitudeRef: 'ground' \| 'sea'`** eklendi (varsayılan `ground`) | İki adapter aynı composite'i çizer; gerçek telemetri irtifası deniz seviyesinden, arazili motor zemini çıkarmalı | [08](design/08-extensibility-symbology.md#composite-unsur-iha) |

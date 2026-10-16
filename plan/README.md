@@ -31,7 +31,7 @@
 | 1.6 | [phase-1.6-layer-tree.md](phases/phase-1.6-layer-tree.md) | Katman ağacı (LayerTree) | ⬜ (detaylandırılacak) |
 | 2 | [phase-2-interaction.md](phases/phase-2-interaction.md) | Seçim, hover, olaylar, overlay, çizim/düzenleme, MGRS | ✅ |
 | 3 | [phase-3-symbology.md](phases/phase-3-symbology.md) | APP-6 semboloji, etiket, LOD, ingest Worker | ⬜ |
-| 4 | [phase-4-composite-scale.md](phases/phase-4-composite-scale.md) | Composite, kümeleme, vektör altlık birleştirme | ⬜ |
+| 4 | [phase-4-composite-scale.md](phases/phase-4-composite-scale.md) | Composite, kümeleme, vektör altlık birleştirme | 🔄 (4.1 composite İHA, 4.2 kümeleme) |
 | 5 | [phase-5-3d.md](phases/phase-5-3d.md) | Cesium, 3D model, terrain | 🔄 (adapter, arazi, İHA, demo `cesium.html`) |
 
 Durum işaretleri: ⬜ başlamadı · 🔄 devam ediyor · ✅ bitti · ⏸ beklemede

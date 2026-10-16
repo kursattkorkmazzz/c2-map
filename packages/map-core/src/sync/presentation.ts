@@ -24,6 +24,12 @@ export interface PresentationStage {
   process(batch: RenderBatch, context: PresentationContext): RenderBatch;
   /** Kamera değişince ek bir batch gerekiyorsa döner (ör. zoom eşiği geçildi → kümeler yeniden). */
   onViewChange?(view: CameraView, context: PresentationContext): RenderBatch | null;
+  /**
+   * Aşama kaldırılırken (`MapSync.setStages`): ürettiği sentetik unsurları silen batch'i döner ve iç
+   * durumunu sıfırlar. Gerçek unsurları geri getirmek gerekmez: MapSync aşama değişince görünen her
+   * şeyi tüm bitlerle yeniden gönderir.
+   */
+  onRemove?(context: PresentationContext): RenderBatch | null;
 }
 
 /** Aşamaları sırayla uygular. */

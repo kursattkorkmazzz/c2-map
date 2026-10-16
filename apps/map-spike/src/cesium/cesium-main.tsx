@@ -3,7 +3,7 @@
 //     Değişen tek şey adapter: createCesiumAdapter (Faz 5 hedefi: "aynı uygulama kodu, 3B motor").
 //   - Cesium ion YOK: arazi Terrarium (AWS Open Data), görüntü Esri World Imagery (XYZ altlık).
 //   - Rastgele birlikler (sayı / hız ayarlanabilir) ve İHA'lar (irtifa MSL, sayı ayarlanabilir).
-// URL: ?n=2000&hz=1&uav=6&uavhz=5&q=balanced|high|fast
+// URL: ?n=2000&hz=1&uav=6&uavhz=5&q=balanced|high|fast&cluster=1|0
 
 import 'cesium/Build/Cesium/Widgets/CesiumWidget/CesiumWidget.css';
 import '../style.css';
@@ -27,6 +27,7 @@ import {
 } from '@c2/map-core';
 import {
   billboardRenderer,
+  cesiumClusterRenderer,
   cesiumUavRenderer,
   createCesiumAdapter,
   RENDER_QUALITY,
@@ -58,10 +59,11 @@ import {
   useSelection,
   type ContextMenuState,
 } from '@c2/map-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UnitGenerator, type UnitMessage } from '../generator';
 import { buildSidc, ECHELONS, ENTITIES, SymbolCache } from '../symbology';
+import { clusterColor, ClusterControls, unitClusterStage } from '../clustering';
 import { startUavFeed, UAV_LAYER, UAV_VIEW } from './uav-feed';
 
 const params = new URLSearchParams(location.search);
@@ -74,6 +76,7 @@ const QUALITY = (Object.values(RENDER_QUALITY) as string[]).includes(params.get(
 
 const UNITS = 'birlikler';
 const DRAWINGS = 'cizimler';
+const CLUSTER_DEFAULT = params.get('cluster') !== '0';
 const ANKARA = { center: [32.85, 39.9] as [number, number], zoom: 7.2, pitchDeg: 45, bearingDeg: 0 };
 
 // ── Altlıklar: hepsi ücretsiz, anahtarsız ────────────────────────
@@ -142,6 +145,8 @@ const adapter = createCesiumAdapter({
         return { key: sidc, image: img.canvas, width: img.width, height: img.height };
       },
     }),
+    // Kümeler (ClusterStage): kimlik renginde rozet billboard'u
+    cluster: cesiumClusterRenderer({ color: clusterColor }),
     // Composite İHA: glTF + sensör konisi + iz (aynı model dosyası, aynı props)
     uav: cesiumUavRenderer({ modelUrl: `${import.meta.env.BASE_URL}models/predator.glb`, modelScale: 8, minPixels: 48 }),
   },
@@ -151,6 +156,8 @@ const adapter = createCesiumAdapter({
 (window as unknown as { c2Adapter: typeof adapter }).c2Adapter = adapter;
 
 const store = createMapStore();
+const clusterStage = unitClusterStage(UNITS);
+(window as unknown as Record<string, unknown>).c2Cluster = clusterStage;
 (window as unknown as { c2Store: typeof store }).c2Store = store;
 
 // ── Canlı birlik akışı (React dışı) ──────────────────────────────
@@ -344,7 +351,9 @@ function PointerCoordinate() {
 
 type Settings = typeof INITIAL;
 
-function Panel({ settings, onApply }: { settings: Settings; onApply: (s: Settings) => void }) {
+type PanelProps = { settings: Settings; onApply: (s: Settings) => void; clustering: boolean; onClustering: (on: boolean) => void };
+
+function Panel({ settings, onApply, clustering, onClustering }: PanelProps) {
   const map = useMap();
   const [draft, setDraft] = useState(settings);
   const [fps, setFps] = useState(0);
@@ -400,6 +409,7 @@ function Panel({ settings, onApply }: { settings: Settings; onApply: (s: Setting
       <QualityPicker />
       <LayerToggle id="harekat" label="Kontrol tedbirleri" />
       <LayerToggle id={UNITS} label="Birlikler" />
+      <ClusterControls stage={clusterStage} enabled={clustering} onToggle={onClustering} />
       <LayerToggle id={UAV_LAYER} label="İHA'lar" />
       <fieldset>
         <legend>Simülasyon</legend>
@@ -431,10 +441,12 @@ const DRAWING_STYLE = { fillColor: '#4dd0e1', fillOpacity: 0.25, strokeColor: '#
 
 function App() {
   const [settings, setSettings] = useState(INITIAL);
+  const [clustering, setClustering] = useState(CLUSTER_DEFAULT);
+  const stages = useMemo(() => (clustering ? [clusterStage] : []), [clustering]);
   useEffect(() => startUnits(settings.units, settings.unitHz), [settings.units, settings.unitHz]);
   useEffect(() => startUavFeed(store, { count: settings.uavs, hz: settings.uavHz }), [settings.uavs, settings.uavHz]);
   return (
-    <Map adapter={adapter} store={store} initialView={ANKARA} style={{ position: 'absolute', inset: 0 }}>
+    <Map adapter={adapter} store={store} stages={stages} initialView={ANKARA} style={{ position: 'absolute', inset: 0 }}>
       {BASEMAPS.map((b) => (
         <MapBasemap key={b.id} {...b} />
       ))}
@@ -462,7 +474,7 @@ function App() {
         {(id) => <UnitTooltip id={id} />}
       </MapTooltip>
       <MapContextMenu className="context-menu">{(menu) => <ContextMenu {...menu} />}</MapContextMenu>
-      <Panel settings={settings} onApply={setSettings} />
+      <Panel settings={settings} onApply={setSettings} clustering={clustering} onClustering={setClustering} />
     </Map>
   );
 }

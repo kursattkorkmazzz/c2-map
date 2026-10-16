@@ -70,6 +70,12 @@ flowchart TB
     T_HANDLES["handlesOf · moveHandle · removeHandle<br/>köşe · ara nokta · merkez · yarıçap · eksen · genişlik"]
   end
 
+  subgraph CLUSTER["cluster/ — kümeleme (Faz 4.2)"]
+    C_STAGE["ClusterStage (sunum aşaması)<br/>ızgara, artımlı · clusterKey · keyOffsetPx<br/>gizle → cluster:… unsuru · seçimi kümeye taşı<br/>getCluster · getClusters · onViewChange · onRemove"]
+    C_EVT["bindClusterEvents<br/>CLICK(cluster:…) → CLUSTER_CLICK + ClusterInfo"]
+    C_BADGE["clusterBadge · clusterLabel<br/>rozet canvas'ı (tarayıcı)"]
+  end
+
   subgraph GEO["geo/ — saf hesaplar"]
     G_GEOD["geodesic (geographiclib)<br/>distance · bearing · destination<br/>polygonArea · geodesicCircle"]
     G_SHAPES["shapes<br/>shapeRings · ellipseRing · corridorRing"]
@@ -129,6 +135,11 @@ flowchart TB
   T_HANDLES --> G_GEOD
 
   %% geo
+  C_STAGE -. "uygular" .-> Y_PRES
+  Y_SYNC -- "setStages · onRemove" --> C_STAGE
+  C_STAGE -- "RenderBatch dönüşümü" --> A_BATCH
+  C_EVT --> E_ROUTER & C_STAGE
+
   G_SHAPES --> G_GEOD
   G_SENSOR --> G_GEOD
   R_BOUNDS --> M_GEOM

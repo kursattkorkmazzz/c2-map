@@ -7,7 +7,7 @@
 1. **`FeatureKindRegistry`** (çekirdek, motor-bağımsız):
    `kind → { validate, defaultStyle, defaultProps, bounds(f), fallback(f) }`.
    `fallback`: motor bu kind'i desteklemiyorsa daha basit bir kind'e çevirir (model3d → marker).
-   Sonra eklenecek: `clusterKey(f)` (sembol-farkında kümeleme, [04](04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası)).
+   Sembol-farkında kümeleme `ClusterStage({ clusterKey(f) })` ile (kind'a değil uygulamaya bağlı; ör. SIDC kimliği), [04](04-sync-and-rendering.md#kümeleme-faz-42).
 2. **Adapter renderer'ları:** `adapter.registerRenderer(kind, renderer)` ([05](05-adapter-and-events.md#renderer-türleri)).
 3. **`BasemapProviderRegistry`:** firma-özel auth, URL dönüşümü, `custom:*` kaynak tipleri.
 4. **`SymbologyRegistry`:** aşağıda.

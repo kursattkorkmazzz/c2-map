@@ -37,7 +37,7 @@
 | Askeri sembol | Genişletilebilir symbology registry; ilk sağlayıcı APP-6(D) | [08](08-extensibility-symbology.md) |
 | Sembol önbelleği | Kod başına tek görüntü; birliğe özel metin görüntüye gömülmez | [04](04-sync-and-rendering.md#askeri-semboller-ve-ikonlar) |
 | LOD | Zorunlu: uzak zoom'da nokta/küme, yakın zoom'da tam sembol | [04](04-sync-and-rendering.md#zooma-göre-gösterim-lod) |
-| Kümeleme | İlk sürümde yok; boş "sunum aşaması" genişleme noktası bugünden konur | [04](04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası) |
+| Kümeleme | "Sunum aşaması" olarak takılır (`ClusterStage`, ızgara + artımlı, sembol-farkında; Faz 4.2) | [04](04-sync-and-rendering.md#kümeleme-faz-42) |
 | Akıcı hareket | `off` / `on` / `auto` (çizim hızına göre, histerezisli) | [04](04-sync-and-rendering.md#akıcı-hareket) |
 
 ## Mimari

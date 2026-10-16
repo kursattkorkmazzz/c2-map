@@ -16,6 +16,7 @@ flowchart LR
     C_ACTIONS["actions<br/>FeatureActions · FeatureLifecycle<br/>ActionResult · FeaturePermissions"]
     C_DRAW["draw<br/>DrawController · DRAW_TOOL · DrawPreview<br/>DrawState · DrawToolKind · DrawMeasurement"]
     C_EDIT["edit<br/>EditController · EditState"]
+    C_CLUSTER["cluster<br/>ClusterStage · CLUSTER_KIND · ClusterInfo<br/>bindClusterEvents · isClusterSource<br/>clusterBadge · ClusterProps"]
     C_GEO["geo<br/>shapeRings · sensorFootprint · distance · destination<br/>formatDistance · formatArea · formatCoordinate<br/>parseCoordinate · toMgrs"]
   end
 
@@ -25,6 +26,7 @@ flowchart LR
     F_BASE["basemaps.ts"]
     F_DECK["deck/deck-controller.ts"]
     F_UAV["deck/uav-renderer.ts"]
+    F_CLU["deck/cluster-renderer.ts"]
     F_PRV["draw-preview.ts"]
     F_GEOM["geometry.ts"]
     F_REND["renderers/ (types · vector · marker)"]
@@ -50,6 +52,7 @@ flowchart LR
     K_BB["renderers/billboard.ts"]
     K_VEC["renderers/vector.ts · draw-preview.ts"]
     K_UAV["renderers/uav.ts"]
+    K_CLU["renderers/cluster.ts"]
     K_GH["ground-height.ts · renderers/types.ts"]
   end
 
@@ -61,6 +64,7 @@ flowchart LR
     S_UAV["react/uav-sim.ts"]
     S_CES["cesium/cesium-main.tsx — cesium.html"]
     S_UAV3["cesium/uav-feed.ts (irtifa MSL)"]
+    S_CLU["clustering.tsx (kimliğe göre ClusterStage)"]
   end
 
   %% @c2/map-maplibre
@@ -128,3 +132,7 @@ flowchart LR
   C_GEO -- "toMgrs · formatCoordinate (imleç)" --> S_CES
   C_GEO -- "destination (yörünge)" --> S_UAV3
   C_UAV -- "UavProps · ALTITUDE_REF.SEA" --> S_UAV3 & S_CES
+  C_CLUSTER -- "bindClusterEvents · isClusterSource · ClusterInfo<br/>(+ events: isSyntheticId)" --> R_MAP
+  C_CLUSTER -- "clusterBadge · ClusterProps (rozet → ikon)" --> F_CLU
+  C_CLUSTER -- "clusterBadge · ClusterProps (rozet → billboard)" --> K_CLU
+  C_CLUSTER -- "ClusterStage · ClusterInfo" --> S_CLU

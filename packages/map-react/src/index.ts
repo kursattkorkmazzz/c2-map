@@ -1,7 +1,7 @@
 // @c2/map-react — @c2/map-core için React binding'i. Motor bilmez: adapter dışarıdan verilir.
 // Tasarım: plan/design/07-react-api.md
 
-export { applyClickSelection, Map, MapStoreProvider, type MapProps } from './map';
+export { applyClickSelection, Map, MapStoreProvider, zoomToCluster, type MapProps } from './map';
 export { isInLayer, MapTooltip, type MapTooltipProps } from './components/map-tooltip';
 export { MapContextMenu, type ContextMenuState, type MapContextMenuProps } from './components/map-context-menu';
 export type { MapHandle } from './map-handle';

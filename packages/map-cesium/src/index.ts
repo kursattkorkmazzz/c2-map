@@ -27,3 +27,4 @@ export { EMPTY_STATE, type CesiumKindRenderer, type CesiumRenderContext, type Fu
 export { cesiumUavRenderer, type CesiumUavRendererOptions } from './renderers/uav';
 export { VECTOR_DEFAULTS, vectorParts, vectorRenderer, type VectorParts, type VectorStyle } from './renderers/vector';
 export { GroundHeightCache, type GroundHeightCacheOptions } from './ground-height';
+export { cesiumClusterRenderer } from './renderers/cluster';

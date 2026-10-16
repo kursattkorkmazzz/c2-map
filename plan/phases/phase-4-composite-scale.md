@@ -1,6 +1,6 @@
 # Faz 4 — Composite ve ölçek
 
-← [Plan ana sayfası](../README.md) · Durum: ⬜ · Önkoşul: Faz 3
+← [Plan ana sayfası](../README.md) · Durum: 🔄 · Önkoşul: Faz 3
 
 **Amaç:** Bileşik unsurlar, kümeleme ve büyük ölçekte kalan darboğazlar.
 
@@ -15,12 +15,16 @@ Tasarım: [04](../design/04-sync-and-rendering.md#composite)
 - [x] `<CompositeFeature id kind position|geometry props>` React kısayolu; spike'ta JSX'ten sürülen "GÖZCÜ" İHA'sı (kamera pan'ı kaydırıcıdan)
 
 ## 4.2 Kümeleme
-Tasarım: [04](../design/04-sync-and-rendering.md#sunum-aşaması-kümeleme-için-genişleme-noktası)
-- [ ] `ClusterStage` (sunum aşaması olarak; supercluster)
-- [ ] Sentetik `cluster:…` id'leri, `CLUSTER_CLICK` olayı
-- [ ] Sembol-farkında kümeleme (`clusterKey(f)`)
-- [ ] Seçili unsur içeren kümenin vurgulanması
-- [ ] **Ölçüm** ([Faz 1.5](phase-1.5-perf.md) altyapısıyla): 50k'da kümeleme maliyeti (zoom değişiminde ve 1 Hz akışta)
+Tasarım: [04 — Kümeleme](../design/04-sync-and-rendering.md#kümeleme-faz-42) · Ölçüm: [findings](../spike/findings.md#kümeleme-faz-42-2026-10-16)
+- [x] `ClusterStage` (sunum aşaması) — **ızgara, artımlı** (supercluster yerine: canlı akışta indeksi her güncellemede baştan kurmamak için, [karar](../decisions.md)); `MapSync.setStages` + aşama sözleşmesine `onRemove`
+- [x] Sentetik `cluster:…` id'leri (kind `cluster`, props `{ count, key }`), `CLUSTER_CLICK` olayı (`bindClusterEvents`, veri: üye id'leri + sınır kutusu)
+- [x] Sembol-farkında kümeleme (`clusterKey(f)`) + aynı hücredeki anahtarların ekranda kaydırılması (`keyOffsetPx`)
+- [x] Seçili unsur içeren kümenin vurgulanması (gizli unsurun durumu saklanır, küme açılınca geri gelir)
+- [x] React: `<Map stages>` (yerinde değişir), varsayılan etkileşim: kümeye tıklama → yakınlaş (`zoomToCluster`), seçim değişmez
+- [x] Rozet (`clusterBadge`, sınırlı etiket kümesi) + renderer'lar: MapLibre deck ikon yolu (`clusterIconRenderer`), Cesium billboard (`cesiumClusterRenderer`); demo `react.html` / `cesium.html`
+- [x] **Ölçüm:** 50k, 1 Hz: aşama ~42 ms/sn, deck.gl işi 3–5 kat az; flush başına adapter işlemi 5000 → 3 (z6); zoom değişimi ~100 ms (Node)
+- [ ] Ekran-uzayı kümeleme (Cesium eğik görünümde ufka doğru kümeler sıklaşıyor)
+- [ ] Küme üzerine gelince içerik özeti (tooltip) — şimdilik panelde son tıklanan küme
 
 ## 4.3 Vektör stil altlıkları
 - [ ] Style birleştirme (id öneki), glyph/sprite çakışma çözümü

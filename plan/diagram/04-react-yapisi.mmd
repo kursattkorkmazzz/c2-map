@@ -4,7 +4,7 @@
 flowchart TB
   APPCODE["Uygulama<br/>adapter = createMaplibreAdapter(...)<br/>store = createMapStore() (isteğe bağlı)<br/>lifecycle = { beforeCreate, beforeUpdate, beforeDelete }"]
 
-  subgraph MAP["&lt;Map adapter initialView store? lifecycle? defaultInteractions? ref&gt; — map.tsx"]
+  subgraph MAP["&lt;Map adapter initialView store? stages? lifecycle? defaultInteractions? ref&gt; — map.tsx"]
     direction TB
     M_STORE["MapStore<br/>prop → MapStoreProvider → yeni"]
     M_ROUTER["EventRouter(store)"]
@@ -12,9 +12,10 @@ flowchart TB
     M_ACTIONS["FeatureActions(store)<br/>setLifecycle(props.lifecycle)"]
     M_DRAW["DrawController({ events: router, adapter })"]
     M_EDIT["EditController({ store, actions, events, adapter })"]
-    M_MOUNT["mount effect<br/>adapter.mount(container) — adapter başına söz zinciri<br/>(StrictMode / kapat-aç güvenli)<br/>→ new MapSync(store, adapter).start()<br/>→ VIEW_CHANGE → sync.setView · ResizeObserver"]
-    M_DEFAULT["Varsayılan etkileşimler (router global)<br/>CLICK → applyClickSelection (Ctrl/⌘ toggle, Shift ekle)<br/>POINTER_ENTER/LEAVE → setHovered<br/>çizim / düzenleme sürerken kapalı"]
+    M_MOUNT["mount effect<br/>adapter.mount(container) — adapter başına söz zinciri<br/>(StrictMode / kapat-aç güvenli)<br/>→ new MapSync(store, adapter, stages)<br/>→ setView(adapter.getView()) → start()<br/>→ VIEW_CHANGE → sync.setView · ResizeObserver"]
+    M_DEFAULT["Varsayılan etkileşimler (router global)<br/>CLICK → applyClickSelection (Ctrl/⌘ toggle, Shift ekle)<br/>POINTER_ENTER/LEAVE → setHovered<br/>CLUSTER_CLICK → zoomToCluster (seçim değişmez)<br/>çizim / düzenleme sürerken kapalı"]
     M_KEYS["Klavye (çizim / düzenleme sürerken)<br/>Esc · Enter · Backspace → edit.key / draw.key"]
+    M_STAGES["stages prop (useMemo)<br/>değişince sync.setStages (yerinde)<br/>küme veren aşama → bindClusterEvents"]
     M_HANDLE["MapHandle (useMap · ref)<br/>flyTo · setView · fitBounds · getView · project"]
   end
 
@@ -49,6 +50,7 @@ flowchart TB
   APPCODE --> MAP
   MAP --> C_STORE & C_MAP
   M_MOUNT --> ADP
+  M_STAGES -. "ClusterStage" .-> CORE
   M_DRAW & M_EDIT -- "setDrawMode / setDrawPreview" --> ADP
   M_STORE & M_ROUTER & M_ACTIONS & M_DRAW & M_EDIT -. "örnekleri" .-> CORE
 

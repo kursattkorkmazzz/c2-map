@@ -2,7 +2,7 @@
 //   - Altlıklar ve kontrol tedbirleri: bildirimsel bileşenler (<MapBasemap>, <MapLayer>, <Polygon>…)
 //   - Canlı birlikler: React'ten GEÇMEZ; üreteç → createLayerStream → store (07-react-api.md#canlı-veri)
 //   - Seçili birlik kartı: <MapOverlay> + useFeature (yalnız o birlik değişince render)
-// URL: ?n=3000&motion=auto|on|off
+// URL: ?n=3000&motion=auto|on|off&cluster=1|0
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../style.css';
@@ -24,7 +24,7 @@ import {
   type FeatureLifecycle,
   type StreamItem,
 } from '@c2/map-core';
-import { createMaplibreAdapter, MOTION_MODE, uavRenderer, type DeckIcon, type MotionMode, type UavProps } from '@c2/map-maplibre';
+import { clusterIconRenderer, createMaplibreAdapter, MOTION_MODE, uavRenderer, type DeckIcon, type MotionMode, type UavProps } from '@c2/map-maplibre';
 import { startUavStream, UAV_LAYER, UAV_VIEW } from './uav-sim';
 import {
   Circle,
@@ -52,17 +52,19 @@ import {
   useSelection,
 } from '@c2/map-react';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BASEMAPS } from '../core/basemaps';
 import { UnitGenerator, type UnitMessage } from '../generator';
 import { buildSidc, ECHELONS, ENTITIES, SymbolCache } from '../symbology';
+import { clusterColor, ClusterControls, unitClusterStage } from '../clustering';
 
 const params = new URLSearchParams(location.search);
 const COUNT = Number(params.get('n') ?? 3000);
 const MOTION = (params.get('motion') ?? MOTION_MODE.AUTO) as MotionMode;
 const UNITS = 'birlikler';
 const DRAWINGS = 'cizimler';
+const CLUSTER_DEFAULT = params.get('cluster') !== '0';
 
 // ── Uygulama düzeyi nesneler (React dışında, bir kez) ────────────
 
@@ -75,6 +77,8 @@ const adapter = createMaplibreAdapter({
   deckRenderers: {
     // Composite: tek unsurdan 3B model + sensör konisi + iz + etiket (deck/uav-renderer.ts)
     uav: uavRenderer({ modelUrl: `${import.meta.env.BASE_URL}models/predator.glb`, modelScale: 8, minPixels: 46 }),
+    // Kümeler (ClusterStage): birliklerle aynı ikon katmanında, kimlik renginde rozet
+    cluster: clusterIconRenderer({ color: clusterColor }),
     milsym: {
       icon: (f) => {
         const sidc = sidcOf(f);
@@ -94,6 +98,10 @@ const adapter = createMaplibreAdapter({
 });
 
 const store = createMapStore();
+(window as unknown as Record<string, unknown>).c2Store = store;
+(window as unknown as Record<string, unknown>).c2Adapter = adapter;
+const clusterStage = unitClusterStage(UNITS);
+(window as unknown as Record<string, unknown>).c2Cluster = clusterStage;
 
 // ── Canlı akış (React dışı) ──────────────────────────────────────
 
@@ -327,7 +335,9 @@ function SelectionCount() {
   return <>{useSelection().selected.size}</>;
 }
 
-function Panel({ gozcuPan, onGozcuPan }: { gozcuPan: number; onGozcuPan: (pan: number) => void }) {
+type PanelProps = { gozcuPan: number; onGozcuPan: (pan: number) => void; clustering: boolean; onClustering: (on: boolean) => void };
+
+function Panel({ gozcuPan, onGozcuPan, clustering, onClustering }: PanelProps) {
   const map = useMap();
   const renders = useRenderCount();
   const [fps, setFps] = useState(0);
@@ -370,6 +380,7 @@ function Panel({ gozcuPan, onGozcuPan }: { gozcuPan: number; onGozcuPan: (pan: n
       <BasemapPicker />
       <LayerToggle id="harekat" label="Harekât (kontrol tedbirleri)" />
       <LayerToggle id={UNITS} label="Birlikler" />
+      <ClusterControls stage={clusterStage} enabled={clustering} onToggle={onClustering} />
       <button onClick={() => map.flyTo({ center: [32.85, 39.9], zoom: 9, pitchDeg: 0, bearingDeg: 0 })}>Ankara'ya uç</button>{' '}
       <button onClick={() => map.flyTo(UAV_VIEW)}>İHA'lara git (3B)</button>
       <GoTo />
@@ -395,8 +406,10 @@ function App() {
   useEffect(startStream, []);
   useEffect(() => startUavStream(store, 5), []);
   const [gozcuPan, setGozcuPan] = useState(0);
+  const [clustering, setClustering] = useState(CLUSTER_DEFAULT);
+  const stages = useMemo(() => (clustering ? [clusterStage] : []), [clustering]);
   return (
-    <Map adapter={adapter} store={store} lifecycle={lifecycle} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
+    <Map adapter={adapter} store={store} lifecycle={lifecycle} stages={stages} initialView={{ center: [32.85, 39.9], zoom: 6.5 }} style={{ position: 'absolute', inset: 0 }}>
       {BASEMAPS.map((b) => (
         <MapBasemap key={b.id} {...b} />
       ))}
@@ -444,7 +457,7 @@ function App() {
         {(id) => <UnitTooltip id={id} />}
       </MapTooltip>
       <MapContextMenu className="context-menu">{(menu) => <ContextMenu {...menu} />}</MapContextMenu>
-      <Panel gozcuPan={gozcuPan} onGozcuPan={setGozcuPan} />
+      <Panel gozcuPan={gozcuPan} onGozcuPan={setGozcuPan} clustering={clustering} onClustering={setClustering} />
     </Map>
   );
 }

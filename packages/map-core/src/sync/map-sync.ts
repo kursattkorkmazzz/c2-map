@@ -93,6 +93,12 @@ export class MapSync {
 
   /** Sunum aşamalarını değiştirir (ör. kümelemeyi aç/kapat); tam yeniden değerlendirme planlar. */
   setStages(stages: readonly PresentationStage[]): void {
+    // Çıkan aşamalar kendi sentetik unsurlarını (küme) temizler.
+    for (const stage of this.stages) {
+      if (stages.includes(stage)) continue;
+      const cleanup = stage.onRemove?.(this.context());
+      if (cleanup && !isEmptyBatch(cleanup)) this.adapter.applyBatch(cleanup);
+    }
     this.stages = stages;
     this.fullPending = true;
     // Aşama değişince adapter'daki görüntü güvenilmez: görünen her şey tüm bitlerle yeniden gider.

@@ -11,6 +11,14 @@ describe("@c2/map-core genel API", () => {
         // model
         "BASEMAP_SOURCE",
         "GEOMETRY_KIND",
+        // cluster
+        "CLUSTER_KIND",
+        "ClusterStage",
+        "clusterBadge",
+        "clusterBadgeSize",
+        "clusterLabel",
+        "bindClusterEvents",
+        "isClusterSource",
         "ALTITUDE_REF",
         "interpolateUav",
         "uavPropsOf",

@@ -311,6 +311,37 @@ değer) · köşe taşırken 26.
    şimdilik kabul edilebilir; 10k+ için ölçülmeli (Faz 5 açık madde).
 5. Bu ölçümler entegre GPU'da; ayrık GPU'lu makinede ayrıca ölçülmeli ([karar #19](../decisions.md#açık-kararlar)).
 
+## Kümeleme (Faz 4.2, 2026-10-16)
+
+**Node, motorsuz** (`MapSync` + `MockAdapter`, 50k birlik, flush başına 5000 hareket = 1 Hz / 10 flush;
+20 flush'ın medyanı):
+
+| | flush | adapter'a giden işlem / flush |
+|---|---|---|
+| kümeleme yok | 7–11 ms | 5000 |
+| `ClusterStage`, zoom 6 (56 küme) | 12 ms | **3** |
+| `ClusterStage`, zoom 9 (2609 küme) | 15 ms | 558 |
+
+İlk kurulum (50k, MapSync dahil) 364 ms; tam sayı zoom değişimi (yeniden kurulum) 95 ms. İki
+iyileştirme ölçümle geldi: aynı hücrede kalan noktada hücre anahtarı kurulmaz (flush 13,5 → 11,8 ms,
+z6), küme merkezi < 2 px kaydıysa güncellenmez (z9'da adapter'a giden ~3000 → 558).
+
+**Tarayıcı** (`react.html?n=50000&motion=off`, headless Edge, Intel UHD; ana thread ms/sn, 4 sn profil,
+iki tur — makine yüklüydü, sayılar gürültülü):
+
+| | kümeleme `process` | deck `_updateLayers` | ikon atlası (`packIcons` + `getDiffIcons`) |
+|---|---|---|---|
+| kümeleme yok | — | 257–454 | 50–103 |
+| kümeleme açık | 42–43 | 72–84 | 6–8 |
+
+Çıkarımlar:
+
+1. Aşamanın kendi maliyeti 50k'da ~42 ms/sn; buna karşılık deck.gl'e giden iş 3–5 kat azalır
+   (ekranda birkaç yüz küme + açıkta kalan birlikler). Uzak zoom'da net kazanç.
+2. Kümeye tıklama → yakınlaşma: MapLibre 6,5 → 9,6, Cesium 7,2 → 11 (üyeler sığdırıldı); seçim korunur.
+3. Düzgün dağılmış rastgele veride ızgara deseni görünür; gerçek (öbekli) veride belirgin değil.
+4. Cesium'un eğik görünümünde ufka doğru kümeler ekranda sıklaşır (kümeleme harita düzleminde).
+
 ## Çekirdek ölçümü — Node, motorsuz (2026-10-13)
 
 Faz 1.5.3'ün tarayıcı gerektirmeyen kısmı. `@c2/map-core` (store + MapSync), hiçbir şey çizmeyen
